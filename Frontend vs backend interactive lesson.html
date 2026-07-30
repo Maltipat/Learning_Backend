@@ -1,0 +1,2124 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Front of house / back of house — how frontend and backend really work</title>
+<meta name="description" content="An interactive, visual lesson on frontend, backend, clients, servers, databases, the request-response cycle and why the frontend can never be trusted.">
+<style>
+/* ============================================================
+   1. DESIGN TOKENS
+   Spatial grammar used everywhere on this page:
+     warm amber  = the user's device / front of house
+     cool teal   = the server / back of house
+     violet blue = stored data / the pantry
+     coral       = danger, mistakes, untrusted input
+   ============================================================ */
+:root{
+  --ink:#0A0E14; --ink-2:#0E141D; --ink-3:#131B26;
+  --glass:rgba(255,255,255,.045); --glass-2:rgba(255,255,255,.075);
+  --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.18);
+  --txt:#E7EDF6; --txt-2:#9AA9BC; --txt-3:#6B7A8E;
+  --front:#F5A94A; --back:#3ED8B4; --data:#8B9BF7; --warn:#FF6F5E; --ok:#6EE7A8;
+  --front-soft:rgba(245,169,74,.13); --back-soft:rgba(62,216,180,.13);
+  --data-soft:rgba(139,155,247,.13); --warn-soft:rgba(255,111,94,.13);
+  --f-sans:system-ui,-apple-system,"Segoe UI Variable","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --f-mono:ui-monospace,"SF Mono",SFMono-Regular,"Cascadia Mono",Menlo,Consolas,monospace;
+  --f-serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --r:14px; --r-lg:20px; --r-sm:8px;
+  --shadow:0 18px 50px -18px rgba(0,0,0,.75);
+  --bar-h:58px; --nav-h:76px;
+}
+html[data-theme="light"]{
+  --ink:#EFEBE3; --ink-2:#FAF8F4; --ink-3:#FFFFFF;
+  --glass:rgba(255,255,255,.62); --glass-2:rgba(255,255,255,.85);
+  --line:rgba(18,24,34,.12); --line-2:rgba(18,24,34,.22);
+  --txt:#141C28; --txt-2:#4B5867; --txt-3:#77838F;
+  --front:#A8620C; --back:#0B7A64; --data:#3F4BB8; --warn:#BE3A29; --ok:#0E7A52;
+  --front-soft:rgba(168,98,12,.10); --back-soft:rgba(11,122,100,.10);
+  --data-soft:rgba(63,75,184,.10); --warn-soft:rgba(190,58,41,.10);
+  --shadow:0 18px 44px -20px rgba(24,32,48,.35);
+}
+
+/* ============================================================
+   2. RESET + PAGE SHELL
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--ink); color:var(--txt);
+  font-family:var(--f-sans); font-size:16px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* Layered gradient atmosphere: warm bloom on the left (device side),
+   cool bloom on the right (server side). Fixed, never scrolls. */
+.atmos{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden}
+.atmos::before,.atmos::after{content:""; position:absolute; border-radius:50%; filter:blur(90px)}
+.atmos::before{
+  width:60vw; height:60vw; left:-18vw; top:-14vw;
+  background:radial-gradient(circle,rgba(245,169,74,.20),transparent 68%);
+}
+.atmos::after{
+  width:66vw; height:66vw; right:-22vw; bottom:-24vw;
+  background:radial-gradient(circle,rgba(62,216,180,.18),transparent 68%);
+}
+.atmos i{
+  position:absolute; left:34%; top:44%; width:46vw; height:46vw; border-radius:50%;
+  background:radial-gradient(circle,rgba(139,155,247,.16),transparent 70%); filter:blur(100px);
+}
+/* Faint grid so glass has something to refract — pure CSS, no images */
+.grid-bg{
+  position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.5;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),
+                   linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:72px 72px;
+  mask-image:radial-gradient(ellipse 80% 60% at 50% 40%,#000 20%,transparent 78%);
+  -webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 40%,#000 20%,transparent 78%);
+}
+.wrap{position:relative; z-index:1; max-width:1080px; margin:0 auto; padding:0 20px}
+
+/* ============================================================
+   3. TYPOGRAPHY
+   ============================================================ */
+.eyebrow{
+  font-family:var(--f-mono); font-size:11.5px; letter-spacing:.20em; text-transform:uppercase;
+  color:var(--txt-3); margin:0 0 14px; display:flex; align-items:center; gap:10px;
+}
+.eyebrow b{color:var(--back); font-weight:500}
+.eyebrow::after{content:""; flex:1; height:1px; background:var(--line)}
+h1,h2,h3,h4{font-weight:800; letter-spacing:-.035em; line-height:1.06; margin:0}
+h1{font-size:clamp(38px,7.4vw,74px)}
+h2{font-size:clamp(28px,4.6vw,46px)}
+h3{font-size:clamp(19px,2.4vw,25px); letter-spacing:-.025em; line-height:1.2}
+h4{font-size:16px; letter-spacing:-.01em; line-height:1.3}
+.lede{font-size:clamp(16px,2.1vw,19.5px); color:var(--txt-2); max-width:60ch; margin:16px 0 0}
+p{margin:10px 0 0}
+.small{font-size:14.5px; color:var(--txt-2); line-height:1.6}
+.tiny{font-size:12.5px; color:var(--txt-3); line-height:1.55}
+.mono{font-family:var(--f-mono); font-size:13px}
+.serif{font-family:var(--f-serif); font-style:italic}
+code{
+  font-family:var(--f-mono); font-size:.88em; padding:2px 6px; border-radius:6px;
+  background:var(--glass-2); border:1px solid var(--line); color:var(--txt);
+}
+.c-front{color:var(--front)} .c-back{color:var(--back)}
+.c-data{color:var(--data)} .c-warn{color:var(--warn)} .c-ok{color:var(--ok)}
+mark{background:var(--back-soft); color:var(--back); padding:1px 5px; border-radius:5px}
+
+/* ============================================================
+   4. GLASS PRIMITIVES
+   ============================================================ */
+.glass{
+  background:var(--glass); border:1px solid var(--line); border-radius:var(--r-lg);
+  backdrop-filter:blur(18px) saturate(150%); -webkit-backdrop-filter:blur(18px) saturate(150%);
+  box-shadow:var(--shadow); position:relative; overflow:hidden;
+}
+.glass::before{
+  content:""; position:absolute; inset:0 0 auto; height:1px;
+  background:linear-gradient(90deg,transparent,var(--line-2) 20%,var(--line-2) 80%,transparent);
+}
+.card{padding:22px}
+.card.hoverable{transition:transform .38s cubic-bezier(.2,.8,.2,1),border-color .3s,background .3s}
+.card.hoverable:hover{transform:translateY(-5px); border-color:var(--line-2); background:var(--glass-2)}
+.card.hoverable:hover .ic{transform:scale(1.12) rotate(-4deg)}
+.grid{display:grid; gap:16px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.row{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+.stack{display:flex; flex-direction:column; gap:14px}
+.pill{
+  font-family:var(--f-mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+  padding:5px 10px; border-radius:999px; border:1px solid var(--line-2); color:var(--txt-2);
+  background:var(--glass); white-space:nowrap;
+}
+.pill.front{color:var(--front); border-color:var(--front); background:var(--front-soft)}
+.pill.back{color:var(--back); border-color:var(--back); background:var(--back-soft)}
+.pill.data{color:var(--data); border-color:var(--data); background:var(--data-soft)}
+.pill.warn{color:var(--warn); border-color:var(--warn); background:var(--warn-soft)}
+.ic{width:26px; height:26px; stroke:currentColor; fill:none; stroke-width:1.6;
+    stroke-linecap:round; stroke-linejoin:round; transition:transform .4s cubic-bezier(.2,.8,.2,1)}
+.ic-sm{width:18px; height:18px}
+.ic-lg{width:38px; height:38px}
+.icbox{
+  width:46px; height:46px; border-radius:13px; display:grid; place-items:center; flex:none;
+  border:1px solid var(--line-2); background:var(--glass-2);
+}
+.icbox.front{color:var(--front); background:var(--front-soft); border-color:var(--front)}
+.icbox.back{color:var(--back); background:var(--back-soft); border-color:var(--back)}
+.icbox.data{color:var(--data); background:var(--data-soft); border-color:var(--data)}
+.icbox.warn{color:var(--warn); background:var(--warn-soft); border-color:var(--warn)}
+
+/* ============================================================
+   5. TOP BAR + PROGRESS + BOTTOM NAV
+   ============================================================ */
+.bar{
+  position:fixed; top:0; left:0; right:0; height:var(--bar-h); z-index:60;
+  display:flex; align-items:center; gap:14px; padding:0 18px;
+  background:var(--ink);
+  background:color-mix(in srgb,var(--ink) 72%,transparent);
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--line);
+}
+.brand{font-family:var(--f-mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--txt-2); white-space:nowrap}
+.brand span{color:var(--front)}
+.pbar{flex:1; height:6px; border-radius:99px; background:var(--glass-2); overflow:hidden; border:1px solid var(--line)}
+.pbar i{
+  display:block; height:100%; width:0%; border-radius:99px;
+  background:linear-gradient(90deg,var(--front),var(--back));
+  transition:width .55s cubic-bezier(.2,.8,.2,1);
+}
+.pcount{font-family:var(--f-mono); font-size:12px; color:var(--txt-2); white-space:nowrap}
+.blocks{display:flex; gap:3px}
+.blocks i{width:9px; height:14px; border-radius:2px; background:var(--glass-2); border:1px solid var(--line)}
+.blocks i.on{background:var(--back); border-color:var(--back)}
+.iconbtn{
+  width:34px; height:34px; border-radius:10px; display:grid; place-items:center; flex:none;
+  background:var(--glass); border:1px solid var(--line); color:var(--txt-2); cursor:pointer;
+  transition:.25s;
+}
+.iconbtn:hover{color:var(--txt); border-color:var(--line-2); transform:translateY(-1px)}
+
+.nav{
+  position:fixed; bottom:0; left:0; right:0; z-index:60; height:var(--nav-h);
+  display:flex; align-items:center; justify-content:center; gap:12px; padding:0 18px;
+  background:var(--ink);
+  background:color-mix(in srgb,var(--ink) 78%,transparent);
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  border-top:1px solid var(--line);
+}
+.btn{
+  font:inherit; font-size:14.5px; font-weight:600; letter-spacing:-.01em;
+  padding:11px 20px; border-radius:12px; cursor:pointer; display:inline-flex; align-items:center; gap:9px;
+  background:var(--glass-2); border:1px solid var(--line-2); color:var(--txt);
+  transition:transform .25s,background .25s,border-color .25s,opacity .25s;
+}
+.btn:hover{transform:translateY(-2px); border-color:var(--txt-3)}
+.btn:disabled{opacity:.32; cursor:not-allowed; transform:none}
+.btn.primary{background:var(--back); color:#04120E; border-color:var(--back); font-weight:700}
+html[data-theme="light"] .btn.primary{color:#FFF}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent}
+.dots{display:flex; gap:6px; flex-wrap:wrap; justify-content:center; max-width:46vw}
+.dots b{
+  width:8px; height:8px; border-radius:50%; background:var(--line-2); cursor:pointer;
+  transition:.3s; display:block;
+}
+.dots b:hover{transform:scale(1.5); background:var(--txt-3)}
+.dots b.on{background:var(--back); box-shadow:0 0 0 4px var(--back-soft)}
+.dots b.done{background:var(--txt-3)}
+
+/* ============================================================
+   6. CHAPTER MACHINERY — one section visible at a time
+   ============================================================ */
+.deck{padding:calc(var(--bar-h) + 34px) 0 calc(var(--nav-h) + 40px)}
+.ch{display:none}
+.ch.on{display:block}
+.ch.on.hero{display:flex}
+.ch.on > *{animation:rise .62s cubic-bezier(.2,.8,.2,1) both}
+.ch.on > *:nth-child(1){animation-delay:.02s} .ch.on > *:nth-child(2){animation-delay:.08s}
+.ch.on > *:nth-child(3){animation-delay:.14s} .ch.on > *:nth-child(4){animation-delay:.20s}
+.ch.on > *:nth-child(5){animation-delay:.26s} .ch.on > *:nth-child(6){animation-delay:.32s}
+.ch.on > *:nth-child(7){animation-delay:.38s} .ch.on > *:nth-child(8){animation-delay:.44s}
+.ch.on > *:nth-child(n+9){animation-delay:.5s}
+@keyframes rise{from{opacity:0; transform:translateY(26px)} to{opacity:1; transform:none}}
+.ch-head{margin-bottom:26px}
+.blk{margin-top:22px}
+
+/* ============================================================
+   7. FLOW DIAGRAMS — chains, wires, travelling packets
+   ============================================================ */
+.chain{display:flex; flex-direction:column; gap:0; align-items:center}
+.chain .node{
+  width:100%; max-width:330px; padding:13px 16px; border-radius:var(--r);
+  border:1px solid var(--line-2); background:var(--glass-2);
+  display:flex; align-items:center; gap:12px; transition:.35s cubic-bezier(.2,.8,.2,1);
+}
+.chain .node:hover{transform:scale(1.035); border-color:var(--txt-3)}
+.chain .node.front{border-color:var(--front); background:var(--front-soft); color:var(--front)}
+.chain .node.back{border-color:var(--back); background:var(--back-soft); color:var(--back)}
+.chain .node.data{border-color:var(--data); background:var(--data-soft); color:var(--data)}
+.chain .node b{color:var(--txt); font-size:15px; font-weight:650; letter-spacing:-.01em; display:block}
+.chain .node em{color:var(--txt-3); font-style:normal; font-size:12.5px; display:block}
+.arrow{height:34px; width:2px; background:linear-gradient(var(--line-2),var(--txt-3)); position:relative; flex:none}
+.arrow::after{
+  content:""; position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+  border-left:5px solid transparent; border-right:5px solid transparent; border-top:7px solid var(--txt-3);
+}
+.arrow i{
+  position:absolute; left:50%; top:0; width:7px; height:7px; margin-left:-3.5px; border-radius:50%;
+  background:var(--back); box-shadow:0 0 12px var(--back); animation:drop 1.9s linear infinite;
+}
+@keyframes drop{0%{top:-4px; opacity:0} 15%{opacity:1} 85%{opacity:1} 100%{top:30px; opacity:0}}
+
+/* Two-column stage: device (left, warm) | server (right, cool) */
+.stage{
+  position:relative; border-radius:var(--r-lg); border:1px solid var(--line);
+  background:var(--glass); padding:24px 20px; overflow:hidden;
+}
+.stage-grid{display:grid; grid-template-columns:1fr 96px 1fr; gap:0; align-items:center}
+.side{display:flex; flex-direction:column; gap:12px}
+.side.r{align-items:stretch}
+.seam{
+  align-self:stretch; position:relative; display:grid; place-items:center;
+}
+.seam::before{
+  content:""; position:absolute; top:-24px; bottom:-24px; left:50%; width:0;
+  border-left:1px dashed var(--warn); opacity:.6;
+}
+.seam span{
+  font-family:var(--f-mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--warn); background:var(--ink-2); border:1px solid var(--warn); border-radius:99px;
+  padding:5px 7px; writing-mode:vertical-rl; z-index:2;
+}
+.box{
+  border:1px solid var(--line-2); border-radius:var(--r); padding:13px 15px; background:var(--glass-2);
+  transition:.35s cubic-bezier(.2,.8,.2,1);
+}
+.box:hover{transform:translateY(-3px); border-color:var(--txt-3)}
+.box b{display:block; font-size:14.5px; letter-spacing:-.01em}
+.box em{font-style:normal; color:var(--txt-3); font-size:12.5px}
+.box.front{border-color:var(--front); background:var(--front-soft)} .box.front b{color:var(--front)}
+.box.back{border-color:var(--back); background:var(--back-soft)} .box.back b{color:var(--back)}
+.box.data{border-color:var(--data); background:var(--data-soft)} .box.data b{color:var(--data)}
+.box.warn{border-color:var(--warn); background:var(--warn-soft)} .box.warn b{color:var(--warn)}
+
+/* Horizontal wire with a packet that travels along it */
+.wire{
+  position:relative; height:42px; display:flex; align-items:center; margin:6px 0;
+}
+.wire .track{
+  flex:1; height:2px; border-radius:2px;
+  background:repeating-linear-gradient(90deg,var(--line-2) 0 7px,transparent 7px 14px);
+}
+.wire .pkt{
+  position:absolute; top:50%; left:0; transform:translate(-50%,-50%);
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.06em;
+  padding:4px 8px; border-radius:7px; white-space:nowrap; opacity:0;
+  background:var(--back); color:#05130F; font-weight:700; box-shadow:0 0 20px var(--back-soft);
+}
+html[data-theme="light"] .wire .pkt{color:#fff}
+.wire .pkt.up{background:var(--front); color:#1A0E00}
+.wire .lbl{
+  position:absolute; left:50%; top:-4px; transform:translateX(-50%);
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--txt-3);
+}
+/* ============================================================
+   8. MEMORY BOXES — remember / mistake / interview tip
+   ============================================================ */
+.memo{
+  border-radius:var(--r); padding:15px 17px 15px 16px; border:1px solid var(--line-2);
+  background:var(--glass-2); border-left:3px solid var(--txt-3);
+  display:flex; gap:13px; align-items:flex-start; transition:.35s;
+}
+.memo:hover{transform:translateX(3px)}
+.memo .icbox{width:34px; height:34px; border-radius:10px}
+.memo .icbox .ic{width:19px; height:19px}
+.memo b{display:block; font-family:var(--f-mono); font-size:10.5px; letter-spacing:.16em;
+        text-transform:uppercase; margin-bottom:3px}
+.memo p{margin:0; font-size:14.5px; color:var(--txt-2); line-height:1.55}
+.memo.tip{border-left-color:var(--back)} .memo.tip b{color:var(--back)}
+.memo.miss{border-left-color:var(--warn)} .memo.miss b{color:var(--warn)}
+.memo.star{border-left-color:var(--front)} .memo.star b{color:var(--front)}
+.memo.note{border-left-color:var(--data)} .memo.note b{color:var(--data)}
+
+/* ============================================================
+   9. ACCORDIONS (interview questions)
+   ============================================================ */
+.acc{border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--glass)}
+.acc + .acc{margin-top:10px}
+.acc-q{
+  width:100%; text-align:left; font:inherit; font-size:15.5px; font-weight:650; letter-spacing:-.012em;
+  color:var(--txt); background:transparent; border:0; cursor:pointer;
+  padding:16px 18px; display:flex; align-items:center; gap:13px; transition:background .25s;
+}
+.acc-q:hover{background:var(--glass-2)}
+.acc-q .num{font-family:var(--f-mono); font-size:11.5px; color:var(--back); flex:none; padding-top:2px}
+.acc-q .chev{margin-left:auto; flex:none; transition:transform .38s cubic-bezier(.2,.8,.2,1); color:var(--txt-3)}
+.acc.open .acc-q .chev{transform:rotate(180deg); color:var(--back)}
+.acc-a{max-height:0; overflow:hidden; transition:max-height .45s cubic-bezier(.2,.8,.2,1)}
+.acc-a-in{padding:0 18px 18px 47px; border-top:1px solid var(--line); padding-top:14px; margin-top:0}
+.acc-a-in p{margin:0 0 8px; font-size:14.5px; color:var(--txt-2)}
+.acc-a-in p:last-child{margin-bottom:0}
+
+/* ============================================================
+   10. FLASHCARDS
+   ============================================================ */
+.flash{
+  perspective:1200px; height:196px; cursor:pointer; background:none; border:0; padding:0;
+  font:inherit; text-align:left; display:block; width:100%;
+}
+.flash-in{
+  position:relative; width:100%; height:100%; transform-style:preserve-3d;
+  transition:transform .7s cubic-bezier(.2,.8,.2,1);
+}
+.flash.flip .flash-in{transform:rotateY(180deg)}
+.flash-f,.flash-b{
+  position:absolute; inset:0; backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  border-radius:var(--r); border:1px solid var(--line-2); padding:18px;
+  display:flex; flex-direction:column; gap:9px; overflow:auto;
+  background:var(--glass-2); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+}
+.flash-f{justify-content:space-between}
+.flash-b{transform:rotateY(180deg); background:var(--back-soft); border-color:var(--back)}
+.flash-q{font-size:15.5px; font-weight:650; letter-spacing:-.012em; line-height:1.35}
+.flash-a{font-size:14px; color:var(--txt-2); line-height:1.6}
+.flash-hint{font-family:var(--f-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--txt-3)}
+.flash:hover .flash-f{border-color:var(--txt-3)}
+
+/* ============================================================
+   11. QUIZ
+   ============================================================ */
+.q{border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; background:var(--glass)}
+.q + .q{margin-top:14px}
+.q-head{display:flex; gap:11px; align-items:flex-start; margin-bottom:14px}
+.q-kind{font-family:var(--f-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+        color:var(--data); border:1px solid var(--data); background:var(--data-soft);
+        padding:4px 8px; border-radius:99px; flex:none; white-space:nowrap}
+.q-text{font-size:16px; font-weight:650; letter-spacing:-.015em; line-height:1.35}
+.opt{
+  width:100%; text-align:left; font:inherit; font-size:14.5px; cursor:pointer;
+  padding:12px 14px; border-radius:11px; border:1px solid var(--line-2);
+  background:var(--glass-2); color:var(--txt); display:flex; align-items:center; gap:11px;
+  transition:.25s; margin-top:9px;
+}
+.opt:hover:not(:disabled){transform:translateX(4px); border-color:var(--txt-3)}
+.opt .key{
+  font-family:var(--f-mono); font-size:11px; width:22px; height:22px; border-radius:6px; flex:none;
+  display:grid; place-items:center; border:1px solid var(--line-2); color:var(--txt-3);
+}
+.opt.right{border-color:var(--ok); background:rgba(110,231,168,.14); color:var(--ok)}
+.opt.right .key{border-color:var(--ok); color:var(--ok)}
+.opt.wrong{border-color:var(--warn); background:var(--warn-soft); color:var(--warn)}
+.opt.wrong .key{border-color:var(--warn); color:var(--warn)}
+.opt:disabled{cursor:default}
+.fb{
+  margin-top:13px; padding:13px 15px; border-radius:11px; font-size:14px; line-height:1.6;
+  border:1px solid var(--line-2); background:var(--glass-2); color:var(--txt-2);
+  display:none; animation:rise .4s both;
+}
+.fb.show{display:block}
+.fb b{color:var(--txt); font-weight:700}
+.fb.good{border-color:var(--ok); background:rgba(110,231,168,.10)}
+.fb.bad{border-color:var(--warn); background:var(--warn-soft)}
+.blank{
+  font:inherit; font-family:var(--f-mono); font-size:14px; width:150px; padding:8px 11px;
+  border-radius:9px; border:1px solid var(--line-2); background:var(--ink-2); color:var(--txt);
+}
+.blank:focus{outline:2px solid var(--back); outline-offset:1px}
+
+/* Drag & drop (click-to-place also supported for touch) */
+.dnd{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.bank{display:flex; flex-wrap:wrap; gap:9px; align-content:flex-start}
+.chip{
+  font-family:var(--f-mono); font-size:12.5px; padding:9px 12px; border-radius:10px; cursor:grab;
+  border:1px dashed var(--line-2); background:var(--glass-2); color:var(--txt); transition:.25s;
+  user-select:none;
+}
+.chip:hover{border-color:var(--back); color:var(--back); transform:translateY(-2px)}
+.chip.sel{border-style:solid; border-color:var(--back); background:var(--back-soft); color:var(--back)}
+.chip.placed{opacity:.28; pointer-events:none}
+.zone{
+  border:1px dashed var(--line-2); border-radius:var(--r); padding:13px; min-height:76px;
+  background:var(--glass); transition:.25s;
+}
+.zone.over{border-color:var(--back); background:var(--back-soft)}
+.zone b{font-family:var(--f-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--txt-3); display:block; margin-bottom:9px}
+.zone.front b{color:var(--front)} .zone.back b{color:var(--back)}
+.zone-items{display:flex; flex-wrap:wrap; gap:7px; min-height:26px}
+.drop{font-family:var(--f-mono); font-size:12px; padding:6px 10px; border-radius:8px;
+      background:var(--glass-2); border:1px solid var(--line-2)}
+.drop.ok{border-color:var(--ok); color:var(--ok)} .drop.no{border-color:var(--warn); color:var(--warn)}
+
+/* ============================================================
+   12. TIMELINE (scenario walkthroughs)
+   ============================================================ */
+.tl{position:relative; padding-left:34px}
+.tl::before{content:""; position:absolute; left:11px; top:6px; bottom:6px; width:1px; background:var(--line-2)}
+.tl-i{position:relative; padding:0 0 18px}
+.tl-i:last-child{padding-bottom:0}
+.tl-i::before{
+  content:""; position:absolute; left:-28px; top:6px; width:11px; height:11px; border-radius:50%;
+  background:var(--ink-2); border:2px solid var(--txt-3); transition:.3s;
+}
+.tl-i.lit::before{border-color:var(--back); background:var(--back); box-shadow:0 0 0 5px var(--back-soft)}
+.tl-i b{font-size:15px; letter-spacing:-.012em; display:block}
+.tl-i em{font-style:normal; font-size:13.5px; color:var(--txt-2); display:block; margin-top:2px}
+.tl-i .who{font-family:var(--f-mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--txt-3)}
+
+/* ============================================================
+   13. SIMULATOR (login flow / tamper demo)
+   ============================================================ */
+.sim{display:grid; grid-template-columns:1.05fr .95fr; gap:18px}
+.screen{
+  border-radius:var(--r); border:1px solid var(--line-2); background:var(--ink-2);
+  padding:16px; display:flex; flex-direction:column; gap:11px;
+}
+.screen-top{display:flex; gap:6px; align-items:center; padding-bottom:11px; border-bottom:1px solid var(--line)}
+.screen-top i{width:9px; height:9px; border-radius:50%; background:var(--line-2)}
+.screen-top span{margin-left:8px; font-family:var(--f-mono); font-size:10.5px; color:var(--txt-3)}
+.field{
+  font:inherit; font-size:14px; padding:10px 12px; border-radius:9px;
+  border:1px solid var(--line-2); background:var(--glass); color:var(--txt); width:100%;
+}
+.field:focus{outline:2px solid var(--front); outline-offset:1px}
+.field-l{font-family:var(--f-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--txt-3); display:block; margin-bottom:5px}
+.verdict{
+  border-radius:10px; padding:11px 13px; font-size:14px; border:1px solid var(--line-2);
+  background:var(--glass); min-height:44px; display:flex; align-items:center; gap:9px; color:var(--txt-2);
+}
+.verdict.ok{border-color:var(--ok); color:var(--ok); background:rgba(110,231,168,.10)}
+.verdict.no{border-color:var(--warn); color:var(--warn); background:var(--warn-soft)}
+.log{
+  font-family:var(--f-mono); font-size:12px; line-height:1.75; border-radius:var(--r);
+  border:1px solid var(--line); background:var(--ink-2); padding:14px; min-height:230px;
+  max-height:280px; overflow:auto; color:var(--txt-2);
+}
+.log div{opacity:0; transform:translateX(-8px); animation:slidein .35s both}
+@keyframes slidein{to{opacity:1; transform:none}}
+.log .t-front{color:var(--front)} .log .t-back{color:var(--back)}
+.log .t-data{color:var(--data)} .log .t-warn{color:var(--warn)} .log .t-ok{color:var(--ok)}
+.switch{display:flex; align-items:center; gap:11px; cursor:pointer; user-select:none}
+.switch input{position:absolute; opacity:0; width:0; height:0}
+.track{width:40px; height:23px; border-radius:99px; background:var(--line-2); position:relative; flex:none; transition:.3s}
+.track::after{content:""; position:absolute; top:3px; left:3px; width:17px; height:17px; border-radius:50%;
+              background:var(--txt); transition:.3s cubic-bezier(.2,.8,.2,1)}
+.switch input:checked + .track{background:var(--warn)}
+.switch input:checked + .track::after{transform:translateX(17px); background:#fff}
+.switch input:focus-visible + .track{outline:2px solid var(--back); outline-offset:3px}
+
+/* ============================================================
+   14. COMPARISON TABLE
+   ============================================================ */
+.tbl{width:100%; border-collapse:collapse; font-size:14.5px}
+.tbl th,.tbl td{padding:12px 14px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top}
+.tbl thead th{
+  font-family:var(--f-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--txt-3); font-weight:500;
+}
+.tbl thead th:nth-child(2){color:var(--front)} .tbl thead th:nth-child(3){color:var(--back)}
+.tbl tbody tr{transition:background .25s} .tbl tbody tr:hover{background:var(--glass-2)}
+.tbl td:first-child{color:var(--txt-3); font-family:var(--f-mono); font-size:12px}
+.tbl-wrap{overflow-x:auto; border-radius:var(--r-lg)}
+
+/* ============================================================
+   15. APP EXAMPLE MINI-ANIMATIONS
+   ============================================================ */
+.app{padding:18px; cursor:pointer}
+.app-viz{
+  height:104px; border-radius:11px; border:1px solid var(--line); background:var(--ink-2);
+  position:relative; overflow:hidden; margin-bottom:13px;
+}
+.app-viz .u,.app-viz .s,.app-viz .d{
+  position:absolute; border-radius:7px; border:1px solid var(--line-2); background:var(--glass-2);
+  display:grid; place-items:center; font-family:var(--f-mono); font-size:9px; color:var(--txt-3);
+}
+.app-viz .u{left:10px; top:50%; transform:translateY(-50%); width:38px; height:46px; color:var(--front); border-color:var(--front)}
+.app-viz .s{right:10px; top:12px; width:44px; height:34px; color:var(--back); border-color:var(--back)}
+.app-viz .d{right:10px; bottom:12px; width:44px; height:30px; color:var(--data); border-color:var(--data)}
+.app-viz .fly{
+  position:absolute; left:52px; top:50%; width:6px; height:6px; border-radius:50%;
+  background:var(--back); box-shadow:0 0 10px var(--back); opacity:0;
+}
+.app:hover .fly{animation:fly 1.5s cubic-bezier(.4,0,.6,1) infinite}
+.app:nth-child(2n):hover .fly{animation-delay:.2s}
+@keyframes fly{
+  0%{opacity:0; left:52px; top:50%} 12%{opacity:1}
+  50%{left:calc(100% - 66px); top:26px} 62%{opacity:1}
+  100%{opacity:0; left:calc(100% - 66px); top:76px}
+}
+.app h4{margin-bottom:4px}
+.app .tiny{margin-top:6px}
+
+/* ============================================================
+   16. MIND MAP / CONCEPT MAP / CHEAT SHEET
+   ============================================================ */
+.map-wrap{overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; margin:0 -4px; padding:0 4px}
+.map{width:100%; min-width:660px; height:auto; display:block; overflow:visible}
+.map-hint{display:none}
+.map text{font-family:var(--f-sans)}
+.map .mt{font-size:12.5px; font-weight:650; fill:var(--txt)}
+.map .ms{font-size:10.5px; fill:var(--txt-3); font-family:var(--f-mono)}
+.map .mn{transition:.35s cubic-bezier(.2,.8,.2,1); cursor:default}
+.map .mn:hover{transform:scale(1.04)}
+.map .edge{stroke:var(--line-2); stroke-width:1; fill:none}
+.map .edge.dash{stroke-dasharray:4 4; stroke:var(--warn); opacity:.7}
+.cheat{
+  font-family:var(--f-mono); font-size:13px; border-radius:var(--r); border:1px solid var(--line);
+  background:var(--ink-2); overflow:hidden;
+}
+.cheat-r{display:grid; grid-template-columns:120px 1fr; gap:0; border-bottom:1px solid var(--line)}
+.cheat-r:last-child{border-bottom:0}
+.cheat-r:hover{background:var(--glass-2)}
+.cheat-r span{padding:11px 14px; color:var(--txt-3); border-right:1px solid var(--line); letter-spacing:.04em}
+.cheat-r p{margin:0; padding:11px 14px; color:var(--txt-2); font-family:var(--f-sans); font-size:13.5px}
+
+/* ============================================================
+   17. HERO
+   ============================================================ */
+.hero{min-height:min(74vh,620px); display:flex; flex-direction:column; justify-content:center}
+.hero h1 em{font-family:var(--f-serif); font-style:italic; font-weight:400; letter-spacing:-.02em}
+.hero h1 .fr{color:var(--front)} .hero h1 .bk{color:var(--back)}
+.hero-viz{margin-top:34px; max-width:640px}
+.marq{
+  display:flex; gap:8px; margin-top:26px; flex-wrap:wrap;
+}
+.count{display:flex; gap:26px; margin-top:30px; flex-wrap:wrap}
+.count div b{display:block; font-size:26px; font-weight:800; letter-spacing:-.03em; color:var(--txt)}
+.count div span{font-family:var(--f-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--txt-3)}
+
+/* ============================================================
+   18. RESPONSIVE
+   ============================================================ */
+@media (max-width:880px){
+  .g4{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:1fr}
+  .sim{grid-template-columns:1fr}
+  .stage-grid{grid-template-columns:1fr; gap:14px}
+  .seam{min-height:52px}
+  .seam::before{top:50%; bottom:auto; left:-10px; right:-10px; width:auto; border-left:0; border-top:1px dashed var(--warn)}
+  .seam span{writing-mode:horizontal-tb}
+  .dots{max-width:38vw}
+}
+@media (max-width:620px){
+  body{font-size:15.5px}
+  .g2,.g4,.dnd{grid-template-columns:1fr}
+  .card{padding:17px}
+  .cheat-r{grid-template-columns:1fr}
+  .cheat-r span{border-right:0; border-bottom:1px solid var(--line)}
+  .nav{gap:8px; padding:0 12px}
+  .btn{padding:10px 14px; font-size:13.5px}
+  .dots{display:none}
+  .brand{display:none}
+  .flash{height:230px}
+  .blocks{display:none}
+  .map-hint{display:block}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001s !important; animation-iteration-count:1 !important; transition-duration:.01s !important}
+  .ch.on > *{animation:none !important}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SVG ICON SPRITE — every icon on this page comes from here.
+     No image files, no icon fonts, no CDN.
+     ============================================================ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-browser" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.4"/><path d="M3 9h18"/><circle cx="6.2" cy="6.5" r=".7" fill="currentColor" stroke="none"/><circle cx="8.6" cy="6.5" r=".7" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10.5 18.6h3"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.6 20c0-4 3.3-6.2 7.4-6.2S19.4 16 19.4 20"/></symbol>
+<symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6.4" rx="1.6"/><rect x="3" y="13.6" width="18" height="6.4" rx="1.6"/><path d="M6.4 7.2h.01M6.4 16.8h.01"/></symbol>
+<symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5.2" rx="8" ry="3.1"/><path d="M4 5.2v13.6c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1V5.2"/><path d="M4 12c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1"/></symbol>
+<symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6.8 18.5h10.6a4.1 4.1 0 0 0 .4-8.2 5.7 5.7 0 0 0-10.9-1.4 3.9 3.9 0 0 0-.1 9.6z"/></symbol>
+<symbol id="i-api" viewBox="0 0 24 24"><path d="M9.5 3.5H7a2 2 0 0 0-2 2v3.6L3 12l2 2.9v3.6a2 2 0 0 0 2 2h2.5"/><path d="M14.5 3.5H17a2 2 0 0 1 2 2v3.6l2 2.9-2 2.9v3.6a2 2 0 0 1-2 2h-2.5"/></symbol>
+<symbol id="i-json" viewBox="0 0 24 24"><path d="M8 4H6.5A1.5 1.5 0 0 0 5 5.5v4L3.2 12 5 14.5v4A1.5 1.5 0 0 0 6.5 20H8"/><path d="M16 4h1.5A1.5 1.5 0 0 1 19 5.5v4L20.8 12 19 14.5v4A1.5 1.5 0 0 1 17.5 20H16"/><circle cx="12" cy="12" r=".9" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.8l8 3v5.9c0 5-3.4 8.4-8 9.6-4.6-1.2-8-4.6-8-9.6V5.8z"/><path d="M8.8 11.8l2.4 2.4 4-4.4"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9z"/></symbol>
+<symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.8M12 18.6v2.8M4.4 12H1.6M22.4 12h-2.8M6.6 6.6L4.6 4.6M19.4 19.4l-2-2M6.6 17.4l-2 2M19.4 4.6l-2 2"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2.8l9 4.8-9 4.8-9-4.8z"/><path d="M3 12.4l9 4.8 9-4.8"/><path d="M3 16.8l9 4.8 9-4.8"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.6" y="10.6" width="14.8" height="10.6" rx="2.2"/><path d="M8.2 10.6V7.8a3.8 3.8 0 0 1 7.6 0v2.8"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.4 2.4L5.6 14h5.6l-1 7.6L18 10h-5.6z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M4.4 12.6l5.2 5.2L19.8 6.4"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="M20 12H5"/><path d="M11 6l-6 6 6 6"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 1.8v2.4M12 19.8v2.4M1.8 12h2.4M19.8 12h2.4M5 5l1.7 1.7M17.3 17.3L19 19M5 19l1.7-1.7M17.3 6.7L19 5"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.4 14.6A8.6 8.6 0 0 1 9.4 3.6a7.6 7.6 0 1 0 11 11z"/></symbol>
+<symbol id="i-hat" viewBox="0 0 24 24"><path d="M6.4 12.4a3.9 3.9 0 1 1 1.5-7.5 4.2 4.2 0 0 1 8.2 0 3.9 3.9 0 1 1 1.5 7.5z"/><rect x="6.4" y="14.6" width="11.2" height="5.4" rx="1.4"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="M8.4 6.4L3 12l5.4 5.6M15.6 6.4L21 12l-5.4 5.6"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.4V12l3.4 2.2"/></symbol>
+<symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.4 18h5.2M10 21h4"/><path d="M12 2.8a6 6 0 0 0-3.6 10.8V18h7.2v-4.4A6 6 0 0 0 12 2.8z"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.4l9.2 16.8H2.8z"/><path d="M12 9.4v4.4M12 17h.01"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.9 6 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5L2.6 9.7l6.5-.9z"/></symbol>
+<symbol id="i-nowifi" viewBox="0 0 24 24"><path d="M3 4l18 18"/><path d="M8.6 14.2a5 5 0 0 1 6.8 0"/><path d="M5 10.6a10 10 0 0 1 14 0"/><path d="M12 19.4h.01"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.4 12S6 5.6 12 5.6 21.6 12 21.6 12 18 18.4 12 18.4 2.4 12 2.4 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+<marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="var(--txt-3)" stroke-width="1.4" stroke-linecap="round"/></marker>
+<marker id="arT" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="var(--back)" stroke-width="1.4" stroke-linecap="round"/></marker>
+<symbol id="i-flow" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="6" rx="1.5"/><rect x="14" y="15" width="7" height="6" rx="1.5"/><path d="M6.5 9v5a2 2 0 0 0 2 2H14"/></symbol>
+</defs></svg>
+
+<div class="atmos" aria-hidden="true"><i></i></div>
+<div class="grid-bg" aria-hidden="true"></div>
+
+<!-- ============================================================
+     TOP BAR — progress bar + block meter + theme switch
+     ============================================================ -->
+<header class="bar">
+  <div class="brand">front&nbsp;of&nbsp;house <span>/</span> back&nbsp;of&nbsp;house</div>
+  <div class="pbar" role="progressbar" aria-label="Lesson progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="pbar"><i id="pfill"></i></div>
+  <div class="blocks" id="blocks" aria-hidden="true"></div>
+  <div class="pcount" id="pcount">01 / 21</div>
+  <button class="iconbtn" id="theme" aria-label="Switch between dark and light"><svg class="ic ic-sm"><use href="#i-sun"/></svg></button>
+</header>
+
+<main class="wrap deck" id="deck">
+
+<!-- ============================================================
+     CH 1 — WELCOME
+     ============================================================ -->
+<section class="ch on hero" data-title="Welcome">
+  <p class="eyebrow"><b>an interactive lesson</b></p>
+  <h1>Every app you use is <span class="fr">a dining room</span><br>bolted onto <span class="bk">a kitchen</span> you<br>are <em>never</em> allowed to enter.</h1>
+  <p class="lede">You sit in the dining room. The kitchen sits somewhere else entirely, guarding the recipes, the till and the pantry. Learn where the wall is, what crosses it, and why the kitchen must never believe a word the dining room says.</p>
+
+  <div class="stage hero-viz">
+    <div class="stage-grid">
+      <div class="side">
+        <div class="box front"><b>Dining room</b><em>the frontend, on your device</em></div>
+      </div>
+      <div class="seam"><span>the wall</span></div>
+      <div class="side r">
+        <div class="box back"><b>Kitchen</b><em>the backend, on a server</em></div>
+        <div class="box data"><b>Pantry</b><em>the database</em></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marq">
+    <span class="pill front">frontend</span><span class="pill back">backend</span>
+    <span class="pill">client</span><span class="pill">server</span>
+    <span class="pill data">database</span><span class="pill">request</span>
+    <span class="pill">response</span><span class="pill warn">trust</span>
+  </div>
+
+  <div class="count">
+    <div><b>21</b><span>chapters</span></div>
+    <div><b>4</b><span>live simulations</span></div>
+    <div><b>10</b><span>interview answers</span></div>
+    <div><b>7</b><span>quiz questions</span></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 2 — THE TWO HALVES
+     ============================================================ -->
+<section class="ch" data-title="Two halves">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 02</b> the shape of all software</p>
+    <h2>Software has two halves.</h2>
+    <p class="lede">One half you can see and touch. One half you cannot reach. Everything else in this lesson is a detail of that split.</p>
+  </div>
+
+  <div class="grid g2">
+    <div class="glass card hoverable">
+      <div class="row" style="justify-content:space-between">
+        <div class="icbox front"><svg class="ic"><use href="#i-browser"/></svg></div>
+        <span class="pill front">you can see it</span>
+      </div>
+      <h3 style="margin-top:14px">The frontend</h3>
+      <p class="small">Runs on the device in your hand. Draws pixels, catches taps, plays animations. It is a very convincing menu — and nothing more.</p>
+    </div>
+    <div class="glass card hoverable">
+      <div class="row" style="justify-content:space-between">
+        <div class="icbox back"><svg class="ic"><use href="#i-hat"/></svg></div>
+        <span class="pill back">you never see it</span>
+      </div>
+      <h3 style="margin-top:14px">The backend</h3>
+      <p class="small">Runs on a machine far away that you do not control. Holds the rules, the secrets and the truth. Decides what is actually allowed to happen.</p>
+    </div>
+  </div>
+
+  <div class="blk glass card">
+    <p class="eyebrow" style="margin-bottom:18px"><b>the mental model</b> keep this one picture</p>
+    <div class="grid g3">
+      <div class="box front"><b>Dining area</b><em>frontend — where you sit</em></div>
+      <div class="box back"><b>Kitchen</b><em>backend — where the work happens</em></div>
+      <div class="box data"><b>Pantry</b><em>database — where things are kept</em></div>
+    </div>
+    <p class="small" style="margin-top:16px"><span class="serif" style="font-size:17px">You order from a menu. A waiter carries the order through a door. Food comes back. You never see the fridge.</span></p>
+  </div>
+
+  <div class="blk memo tip">
+    <div class="icbox back"><svg class="ic"><use href="#i-bulb"/></svg></div>
+    <div><b>Remember</b><p>Frontend and backend are not two parts of one program. They are two separate programs, running on two different computers, talking over a network.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 3 — WHAT IS FRONTEND
+     ============================================================ -->
+<section class="ch" data-title="Frontend">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 03</b> front of house</p>
+    <h2>Frontend is <span class="c-front">presentation</span>.</h2>
+    <p class="lede">Its whole job is to turn data into something a human can look at, and turn a human's finger into a piece of data.</p>
+  </div>
+
+  <div class="grid g2">
+    <div class="glass card">
+      <p class="eyebrow"><b>the chain</b></p>
+      <div class="chain">
+        <div class="node front"><svg class="ic ic-sm"><use href="#i-browser"/></svg><span><b>Screen</b><em>a surface to draw on</em></span></div>
+        <div class="arrow"><i></i></div>
+        <div class="node"><svg class="ic ic-sm"><use href="#i-code"/></svg><span><b>Buttons</b><em>things to press</em></span></div>
+        <div class="arrow"><i style="animation-delay:.3s"></i></div>
+        <div class="node"><svg class="ic ic-sm"><use href="#i-json"/></svg><span><b>Forms</b><em>collect what you type</em></span></div>
+        <div class="arrow"><i style="animation-delay:.6s"></i></div>
+        <div class="node"><svg class="ic ic-sm"><use href="#i-bolt"/></svg><span><b>Animations</b><em>make change feel smooth</em></span></div>
+        <div class="arrow"><i style="animation-delay:.9s"></i></div>
+        <div class="node front"><svg class="ic ic-sm"><use href="#i-user"/></svg><span><b>You</b><em>the only audience</em></span></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="glass card hoverable">
+        <div class="row"><div class="icbox front"><svg class="ic"><use href="#i-phone"/></svg></div>
+        <div><h4>It runs on your device</h4><p class="tiny">Phone, laptop, TV, watch. Downloaded to you, then executed by you.</p></div></div>
+      </div>
+      <div class="glass card hoverable">
+        <div class="row"><div class="icbox front"><svg class="ic"><use href="#i-eye"/></svg></div>
+        <div><h4>It only knows what it was sent</h4><p class="tiny">A frontend showing a price knows that price because a backend told it. It is repeating, not deciding.</p></div></div>
+      </div>
+      <div class="memo miss">
+        <div class="icbox warn"><svg class="ic"><use href="#i-warn"/></svg></div>
+        <div><b>Beginner mistake</b><p>Believing the frontend is "the app". If your phone is switched off, the app still exists — the half that matters is still running.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 4 — WHAT IS BACKEND
+     ============================================================ -->
+<section class="ch" data-title="Backend">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 04</b> back of house</p>
+    <h2>Backend is <span class="c-back">the trusted worker</span>.</h2>
+    <p class="lede">It is the hidden half: logic, rules, security checks, and the wiring that talks to storage. Watch a single tap travel all the way down.</p>
+  </div>
+
+  <div class="grid g2">
+    <div class="glass card">
+      <p class="eyebrow"><b>the journey</b></p>
+      <div class="chain">
+        <div class="node front"><svg class="ic ic-sm"><use href="#i-user"/></svg><span><b>User</b><em>taps something</em></span></div>
+        <div class="arrow"><i></i></div>
+        <div class="node"><svg class="ic ic-sm"><use href="#i-cloud"/></svg><span><b>Internet</b><em>the wire in between</em></span></div>
+        <div class="arrow"><i style="animation-delay:.35s"></i></div>
+        <div class="node back"><svg class="ic ic-sm"><use href="#i-server"/></svg><span><b>Server</b><em>runs the backend program</em></span></div>
+        <div class="arrow"><i style="animation-delay:.7s"></i></div>
+        <div class="node data"><svg class="ic ic-sm"><use href="#i-db"/></svg><span><b>Database</b><em>keeps it after everyone leaves</em></span></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="glass card hoverable"><div class="row">
+        <div class="icbox back"><svg class="ic"><use href="#i-cog"/></svg></div>
+        <div><h4>Applies the rules</h4><p class="tiny">"Is this coupon still valid?" "Has this worker already been deducted this month?" Rules live here because here cannot be edited by the user.</p></div></div>
+      </div>
+      <div class="glass card hoverable"><div class="row">
+        <div class="icbox back"><svg class="ic"><use href="#i-lock"/></svg></div>
+        <div><h4>Guards the secrets</h4><p class="tiny">Password hashes, payment keys, other companies' API keys. None of it is ever shipped to a device.</p></div></div>
+      </div>
+      <div class="glass card hoverable"><div class="row">
+        <div class="icbox data"><svg class="ic"><use href="#i-layers"/></svg></div>
+        <div><h4>Holds the shared truth</h4><p class="tiny">One value that everybody reads: the stock count, the balance, the ride status.</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="blk memo star">
+    <div class="icbox front"><svg class="ic"><use href="#i-star"/></svg></div>
+    <div><b>Interview tip</b><p>Asked "what is the backend?", do not say "the database and the API". Say: the trusted half of the application — logic, rules, authentication and data access — running as a process on a machine the user does not control.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 5 — WHERE EACH ONE RUNS
+     ============================================================ -->
+<section class="ch" data-title="Where it runs">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 05</b> physical locations</p>
+    <h2>Two computers, not one.</h2>
+    <p class="lede">Hover any block. Notice that the database sits outside the application — and that the server is a machine, while the backend is a program running on it.</p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-grid">
+      <div class="side">
+        <div class="box front"><b>Your device</b><em>phone or laptop — you own this</em></div>
+        <div class="box"><b>Frontend program</b><em>screens, taps, animations</em></div>
+      </div>
+      <div class="seam"><span>network</span></div>
+      <div class="side r">
+        <div class="box"><b>Server machine</b><em>a rented computer, always on</em></div>
+        <div class="box back"><b>Web server process</b><em>nginx — answers on port 443</em></div>
+        <div class="box back"><b>Application process</b><em>your backend code, the real logic</em></div>
+        <div class="box data"><b>Database process</b><em>stores rows, understands no rules</em></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="blk grid g2">
+    <div class="memo miss">
+      <div class="icbox warn"><svg class="ic"><use href="#i-warn"/></svg></div>
+      <div><b>Beginner mistake 1</b><p>"Backend = database." The database is one piece. The backend is also the logic, the rules, the security checks and the way it talks to clients.</p></div>
+    </div>
+    <div class="memo miss">
+      <div class="icbox warn"><svg class="ic"><use href="#i-warn"/></svg></div>
+      <div><b>Beginner mistake 2</b><p>"Server = backend." The server is the computer. The backend is the software running on it. One server can run several backends; one backend can spread across many servers.</p></div>
+    </div>
+  </div>
+
+  <div class="blk glass card">
+    <p class="eyebrow"><b>the four layers underneath</b> hardware to port</p>
+    <div class="grid g4">
+      <div class="box"><b>Hardware</b><em>the actual machine</em></div>
+      <div class="box"><b>Operating system</b><em>Linux, usually</em></div>
+      <div class="box back"><b>Process</b><em>this is the backend</em></div>
+      <div class="box"><b>Port</b><em>the door it listens at</em></div>
+    </div>
+    <p class="small" style="margin-top:14px">A stale process still holding a port will break a perfectly healthy application. That is the clearest proof that "server" and "backend" are different words.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 6 — CLIENT VS SERVER
+     ============================================================ -->
+<section class="ch" data-title="Client vs server">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 06</b> a role, not a machine</p>
+    <h2>The one that asks, and the one that answers.</h2>
+    <p class="lede">Client and server are jobs in a conversation. The same program can hold both jobs in the same second.</p>
+  </div>
+
+  <div class="glass card">
+    <div class="grid g3" style="align-items:center">
+      <div class="box front"><b>Client</b><em>asks the question</em></div>
+      <div style="text-align:center"><svg class="ic ic-lg" style="color:var(--txt-3)"><use href="#i-right"/></svg><p class="tiny" style="margin:0">asks / waits</p></div>
+      <div class="box back"><b>Server</b><em>answers the question</em></div>
+    </div>
+  </div>
+
+  <div class="blk tbl-wrap glass">
+    <table class="tbl">
+      <thead><tr><th>question</th><th>client</th><th>server</th></tr></thead>
+      <tbody>
+        <tr><td>who starts?</td><td>always the client</td><td>waits, never speaks first</td></tr>
+        <tr><td>where does it run?</td><td>the user's device</td><td>a machine you control</td></tr>
+        <tr><td>how many at once?</td><td>one user</td><td>thousands of users</td></tr>
+        <tr><td>can the user edit it?</td><td>yes, completely</td><td>no</td></tr>
+        <tr><td>can you trust it?</td><td>never</td><td>it is the only thing you can trust</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="blk memo note">
+    <div class="icbox data"><svg class="ic"><use href="#i-api"/></svg></div>
+    <div><b>The part that trips people up</b><p>Your backend is a server to the browser and a client to the database — in the same request. The role depends on who is asking whom, not on what the machine is.</p></div>
+  </div>
+
+  <div class="blk memo miss">
+    <div class="icbox warn"><svg class="ic"><use href="#i-warn"/></svg></div>
+    <div><b>Beginner mistake 4</b><p>Assuming the two halves are one program sharing memory. They are separate programs on separate machines, so every message costs time and can be lost in transit.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 7 — REQUEST / RESPONSE (live wire simulation)
+     ============================================================ -->
+<section class="ch" data-title="Request flow">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 07</b> the only way to cross</p>
+    <h2>One request. One response.</h2>
+    <p class="lede">Nothing crosses the wall except a message you asked for and a message that comes back. Pick a request and send it.</p>
+  </div>
+
+  <div class="glass card">
+    <div class="row" style="gap:9px; margin-bottom:16px" id="reqPicker">
+      <button class="btn ghost" data-req="0">GET /feed</button>
+      <button class="btn ghost" data-req="1">POST /login</button>
+      <button class="btn ghost" data-req="2">GET /invoice/8812</button>
+    </div>
+
+    <div class="stage-grid" style="align-items:center">
+      <div class="side">
+        <div class="box front" id="rqClient"><b>Your device</b><em>the client — it asks</em></div>
+      </div>
+      <div class="seam"><span>http</span></div>
+      <div class="side r">
+        <div class="box back" id="rqServer"><b>Server</b><em>the backend — it answers</em></div>
+      </div>
+    </div>
+
+    <div class="wire"><span class="lbl">request travels right</span><div class="track"></div><div class="pkt" id="pktA">…</div></div>
+    <div class="wire"><span class="lbl">response travels left</span><div class="track"></div><div class="pkt up" id="pktB">…</div></div>
+
+    <div class="grid g2" style="margin-top:8px">
+      <div>
+        <span class="field-l">what the client sent</span>
+        <div class="log" id="rqOut" style="min-height:150px">Pick a request above.</div>
+      </div>
+      <div>
+        <span class="field-l">what the server sent back</span>
+        <div class="log" id="rsOut" style="min-height:150px">Nothing yet.</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="sendReq"><svg class="ic ic-sm"><use href="#i-bolt"/></svg> Send it</button>
+      <span class="tiny" id="rqNote">A request is a question. A response is an answer. Both are just text.</span>
+    </div>
+  </div>
+
+  <div class="blk grid g3">
+    <div class="glass card hoverable"><div class="icbox back"><svg class="ic"><use href="#i-globe"/></svg></div>
+      <h4 style="margin-top:12px">HTTP</h4><p class="tiny">The agreed format for asking and answering. A method (<code>GET</code>, <code>POST</code>), an address, headers, and a body.</p></div>
+    <div class="glass card hoverable"><div class="icbox data"><svg class="ic"><use href="#i-json"/></svg></div>
+      <h4 style="margin-top:12px">JSON</h4><p class="tiny">The agreed shape of the data inside. Plain text that both halves understand, even though they are written in different languages.</p></div>
+    <div class="glass card hoverable"><div class="icbox front"><svg class="ic"><use href="#i-api"/></svg></div>
+      <h4 style="margin-top:12px">API</h4><p class="tiny">The published list of questions this backend accepts. A contract: break it, and every old app version breaks with it.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 8 — DATABASE IS NOT THE BACKEND
+     ============================================================ -->
+<section class="ch" data-title="Database ≠ backend">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 08</b> beginner mistake 1, in detail</p>
+    <h2>The pantry is not the cook.</h2>
+    <p class="lede">A request passes through four layers. Only the last one is the database — and it is the only layer with no opinion about your business.</p>
+  </div>
+
+  <div class="grid g2">
+    <div class="glass card">
+      <div class="chain">
+        <div class="node back"><svg class="ic ic-sm"><use href="#i-api"/></svg><span><b>Controller</b><em>owns the HTTP surface</em></span></div>
+        <div class="arrow"><i></i></div>
+        <div class="node back"><svg class="ic ic-sm"><use href="#i-cog"/></svg><span><b>Service</b><em>owns the rules</em></span></div>
+        <div class="arrow"><i style="animation-delay:.35s"></i></div>
+        <div class="node"><svg class="ic ic-sm"><use href="#i-layers"/></svg><span><b>Repository</b><em>owns data access</em></span></div>
+        <div class="arrow"><i style="animation-delay:.7s"></i></div>
+        <div class="node data"><svg class="ic ic-sm"><use href="#i-db"/></svg><span><b>Database</b><em>owns storage only</em></span></div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="glass card">
+        <p class="eyebrow"><b>who decides what</b></p>
+        <div class="stack" style="gap:9px">
+          <div class="box back"><b>"Is this deduction allowed twice?"</b><em>service layer — a business rule</em></div>
+          <div class="box data"><b>"Store this number in this row."</b><em>database — no judgement applied</em></div>
+        </div>
+      </div>
+      <div class="memo note">
+        <div class="icbox data"><svg class="ic"><use href="#i-bulb"/></svg></div>
+        <div><b>Why this matters</b><p>If a rule only exists in your code and you forget to run it, the database will happily store the wrong thing. It never says no on your behalf unless you gave it a constraint.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 9 — WHY SPLIT THEM (advantages)
+     ============================================================ -->
+<section class="ch" data-title="Why split">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 09</b> advantages of the split</p>
+    <h2>Four things one device can never do alone.</h2>
+    <p class="lede">Each card is a problem that disappears the moment you add a backend.</p>
+  </div>
+
+  <div class="grid g2">
+    <div class="glass card hoverable">
+      <div class="row"><div class="icbox data"><svg class="ic"><use href="#i-db"/></svg></div><span class="pill data">sharing</span></div>
+      <h3 style="margin-top:13px">Shared state</h3>
+      <p class="small">My phone cannot hold the data your phone needs to read. A backend gives everyone one copy to look at.</p>
+    </div>
+    <div class="glass card hoverable">
+      <div class="row"><div class="icbox back"><svg class="ic"><use href="#i-shield"/></svg></div><span class="pill back">trust</span></div>
+      <h3 style="margin-top:13px">Trusted enforcement</h3>
+      <p class="small">My phone cannot be trusted to decide my own salary, my own discount, or whether my password was right.</p>
+    </div>
+    <div class="glass card hoverable">
+      <div class="row"><div class="icbox front"><svg class="ic"><use href="#i-bolt"/></svg></div><span class="pill front">power</span></div>
+      <h3 style="margin-top:13px">Work devices can't do</h3>
+      <p class="small">Heavy computation, secret API keys, scheduled jobs that run at 2am while every phone is asleep.</p>
+    </div>
+    <div class="glass card hoverable">
+      <div class="row"><div class="icbox"><svg class="ic"><use href="#i-layers"/></svg></div><span class="pill">reach</span></div>
+      <h3 style="margin-top:13px">Many faces, one brain</h3>
+      <p class="small">Web, Android, iOS and an internal tool can all call the same backend. Write the rule once, honour it everywhere.</p>
+    </div>
+  </div>
+
+  <div class="blk memo star">
+    <div class="icbox front"><svg class="ic"><use href="#i-star"/></svg></div>
+    <div><b>Interview tip</b><p>The strongest one-line answer: a backend exists because some state must be shared between users, and some decisions must be made where the user cannot reach them.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 10 — SECURITY (interactive tamper demo)
+     ============================================================ -->
+<section class="ch" data-title="Security">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 10</b> beginner mistake 3 — the expensive one</p>
+    <h2>Never trust the <span class="c-warn">frontend</span>.</h2>
+    <p class="lede">You shipped that code to the user's machine, so the user owns it. Everything arriving from a client is a claim, never a fact. Try breaking this checkout.</p>
+  </div>
+
+  <div class="glass card">
+    <div class="sim">
+      <div class="screen">
+        <div class="screen-top"><i></i><i></i><i></i><span>shop.example — checkout</span></div>
+        <div><span class="field-l">item</span><input class="field" id="tItem" value="Wireless mouse" readonly></div>
+        <div class="grid g2" style="gap:10px">
+          <div><span class="field-l">real price (from server)</span><input class="field" id="tReal" value="1499" readonly></div>
+          <div><span class="field-l">total the app will send</span><input class="field" id="tSend" value="1499"></div>
+        </div>
+        <label class="switch"><input type="checkbox" id="tTrust"><span class="track"></span>
+          <span class="small">Let the frontend decide the total</span></label>
+        <div class="row" style="gap:9px">
+          <button class="btn primary" id="tPay">Place order</button>
+          <button class="btn ghost" id="tZero">Set total to 0</button>
+        </div>
+        <div class="verdict" id="tVerdict"><svg class="ic ic-sm"><use href="#i-clock"/></svg> Waiting for an order.</div>
+      </div>
+      <div>
+        <span class="field-l">what the server does with it</span>
+        <div class="log" id="tLog">Turn the switch on, set the total to 0, and place the order. Then turn it off and try again.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="blk grid g3">
+    <div class="glass card hoverable"><div class="icbox warn"><svg class="ic"><use href="#i-lock"/></svg></div>
+      <h4 style="margin-top:12px">Passwords</h4><p class="tiny">A client cannot check a password, because it would need the correct value to compare against — you would be shipping the secret to the attacker.</p></div>
+    <div class="glass card hoverable"><div class="icbox warn"><svg class="ic"><use href="#i-eye"/></svg></div>
+      <h4 style="margin-top:12px">Hidden buttons</h4><p class="tiny">A greyed-out button is not security. The endpoint behind it is still reachable by anyone who skips your interface entirely.</p></div>
+    <div class="glass card hoverable"><div class="icbox warn"><svg class="ic"><use href="#i-json"/></svg></div>
+      <h4 style="margin-top:12px">Tokens</h4><p class="tiny">A token's payload is encoded, not encrypted — anyone can read and edit it. Only the signature makes it trustworthy, and only your server can check that.</p></div>
+  </div>
+
+  <div class="blk memo miss">
+    <div class="icbox warn"><svg class="ic"><use href="#i-warn"/></svg></div>
+    <div><b>Beginner mistake 3</b><p>Anything on the user's device can be inspected and changed by the user. Never let the frontend decide whether a password is correct, and never hardcode a secret key into an app.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 11 — BUSINESS LOGIC + THE RACE (interactive)
+     ============================================================ -->
+<section class="ch" data-title="Business logic">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 11</b> where the rules live</p>
+    <h2>"Only 2 left in stock."</h2>
+    <p class="lede">The true count lives in exactly one row, in one database. Each phone holds a stale photocopy. Here is what happens when two shoppers act at the same instant.</p>
+  </div>
+
+  <div class="glass card">
+    <div class="sim">
+      <div>
+        <div class="grid g2" style="gap:12px; margin-bottom:14px">
+          <div class="box front"><b>Shopper A</b><em id="sa">sees: —</em></div>
+          <div class="box front"><b>Shopper B</b><em id="sb">sees: —</em></div>
+        </div>
+        <div class="box data" style="text-align:center; padding:20px">
+          <em>true stock in the database</em>
+          <b style="font-size:46px; letter-spacing:-.04em; margin-top:4px" id="stockN">2</b>
+        </div>
+        <label class="switch" style="margin-top:14px"><input type="checkbox" id="safeMode"><span class="track"></span>
+          <span class="small">Make the update atomic in the database</span></label>
+        <div class="row" style="margin-top:12px; gap:9px">
+          <button class="btn primary" id="raceBtn">Both buy at once</button>
+          <button class="btn ghost" id="raceReset">Reset</button>
+        </div>
+      </div>
+      <div>
+        <span class="field-l">timeline</span>
+        <div class="tl" id="raceTl" style="margin-top:10px">
+          <div class="tl-i"><span class="who">t1 · shopper a</span><b>Reads the stock</b><em>gets 2</em></div>
+          <div class="tl-i"><span class="who">t2 · shopper b</span><b>Reads the stock</b><em>also gets 2</em></div>
+          <div class="tl-i"><span class="who">t3 · shopper a</span><b>Writes 2 − 1 = 1</b><em>stock becomes 1</em></div>
+          <div class="tl-i"><span class="who">t4 · shopper b</span><b>Writes 2 − 1 = 1</b><em>stock is still 1</em></div>
+          <div class="tl-i"><span class="who">result</span><b id="raceOut">Two sold. Count dropped by one.</b><em id="raceOut2">One unit sold that does not exist.</em></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="blk grid g2">
+    <div class="glass card">
+      <p class="eyebrow"><b>the broken shape</b></p>
+      <div class="chain" style="align-items:stretch">
+        <div class="node warn" style="max-width:none; border-color:var(--warn); background:var(--warn-soft)"><span><b>read → decide → write</b><em>a gap where someone else can slip in</em></span></div>
+      </div>
+      <p class="small" style="margin-top:12px">Checking harder in your application code does not fix this. The gap is the problem, not the check.</p>
+    </div>
+    <div class="glass card">
+      <p class="eyebrow"><b>the fix</b> one atomic step</p>
+      <div class="chain" style="align-items:stretch">
+        <div class="node back" style="max-width:none"><span><b>read and write together</b><em>the database refuses if the condition fails</em></span></div>
+      </div>
+      <p class="small" style="margin-top:12px">A condition on the update, a row lock inside a transaction, or a uniqueness rule on the table. The last one survives a future developer forgetting the check.</p>
+    </div>
+  </div>
+
+  <div class="blk memo tip">
+    <div class="icbox back"><svg class="ic"><use href="#i-bulb"/></svg></div>
+    <div><b>Remember</b><p>Business logic belongs on the server not because the server is faster, but because the server is the only place where the rule cannot be edited by the person it applies to.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 12 — LOGIN SIMULATION
+     ============================================================ -->
+<section class="ch" data-title="Login simulation">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 12</b> the whole cycle, step by step</p>
+    <h2>Watch a login cross the wall.</h2>
+    <p class="lede">Type anything. The correct password here is <code>letmein</code>. Every step below lights up as it happens.</p>
+  </div>
+
+  <div class="glass card">
+    <div class="sim">
+      <div class="screen">
+        <div class="screen-top"><i></i><i></i><i></i><span>app.example — sign in</span></div>
+        <div><span class="field-l">username</span><input class="field" id="lu" value="bharat" autocomplete="off"></div>
+        <div><span class="field-l">password</span><input class="field" id="lp" type="password" value="letmein" autocomplete="off"></div>
+        <button class="btn primary" id="lgo" style="width:100%; justify-content:center">Sign in</button>
+        <div class="verdict" id="lv"><svg class="ic ic-sm"><use href="#i-clock"/></svg> Not signed in.</div>
+        <p class="tiny">The password box hides characters. That is presentation, not security — the value still leaves your device.</p>
+      </div>
+      <div>
+        <span class="field-l">what happens, in order</span>
+        <div class="tl" id="ltl" style="margin-top:10px">
+          <div class="tl-i"><span class="who">frontend</span><b>Catches the click</b><em>reads both fields, disables the button</em></div>
+          <div class="tl-i"><span class="who">frontend</span><b>Builds a request</b><em>POST /login with a JSON body</em></div>
+          <div class="tl-i"><span class="who">network</span><b>Crosses the wall</b><em>encrypted in transit by TLS</em></div>
+          <div class="tl-i"><span class="who">backend</span><b>Hashes the password</b><em>one-way, then compares hashes</em></div>
+          <div class="tl-i"><span class="who">database</span><b>Looks up the user</b><em>returns the stored hash, never a password</em></div>
+          <div class="tl-i"><span class="who">backend</span><b>Decides and signs a token</b><em>only the server holds the signing key</em></div>
+          <div class="tl-i"><span class="who">frontend</span><b>Updates the screen</b><em>stores the token, shows the next page</em></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="blk memo star">
+    <div class="icbox front"><svg class="ic"><use href="#i-star"/></svg></div>
+    <div><b>Interview tip</b><p>Notice which step is missing: the frontend never compares anything. It collects, sends, and renders the answer. That single sentence answers half of all junior backend interview questions.</p></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 13 — REAL APPS (hover each card to animate)
+     ============================================================ -->
+<section class="ch" data-title="Real apps">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 13</b> the same split, five times</p>
+    <h2>Five apps you already use.</h2>
+    <p class="lede">Hover a card and watch the request travel. Different products, identical shape.</p>
+  </div>
+
+  <div class="grid g3">
+    <div class="glass card app hoverable">
+      <div class="app-viz"><span class="u">you</span><span class="s">api</span><span class="d">db</span><i class="fly"></i></div>
+      <h4>Instagram</h4>
+      <p class="tiny"><span class="c-front">Frontend</span> scrolls the feed and plays the like animation.</p>
+      <p class="tiny"><span class="c-back">Backend</span> decides who may see the photo, then pushes it into your followers' feeds.</p>
+    </div>
+    <div class="glass card app hoverable">
+      <div class="app-viz"><span class="u">you</span><span class="s">api</span><span class="d">db</span><i class="fly"></i></div>
+      <h4>Amazon</h4>
+      <p class="tiny"><span class="c-front">Frontend</span> shows the product page and the cart badge.</p>
+      <p class="tiny"><span class="c-back">Backend</span> owns the stock count, the price and whether the coupon is real.</p>
+    </div>
+    <div class="glass card app hoverable">
+      <div class="app-viz"><span class="u">you</span><span class="s">api</span><span class="d">db</span><i class="fly"></i></div>
+      <h4>Netflix</h4>
+      <p class="tiny"><span class="c-front">Frontend</span> draws the rows and plays the video stream.</p>
+      <p class="tiny"><span class="c-back">Backend</span> decides what your plan allows and remembers where you paused.</p>
+    </div>
+    <div class="glass card app hoverable">
+      <div class="app-viz"><span class="u">you</span><span class="s">api</span><span class="d">db</span><i class="fly"></i></div>
+      <h4>Uber</h4>
+      <p class="tiny"><span class="c-front">Frontend</span> animates the car icon across the map.</p>
+      <p class="tiny"><span class="c-back">Backend</span> matches you to one driver — and stops that driver being matched twice.</p>
+    </div>
+    <div class="glass card app hoverable">
+      <div class="app-viz"><span class="u">you</span><span class="s">api</span><span class="d">db</span><i class="fly"></i></div>
+      <h4>Google</h4>
+      <p class="tiny"><span class="c-front">Frontend</span> is a text box and a list.</p>
+      <p class="tiny"><span class="c-back">Backend</span> searches an index no phone could ever hold.</p>
+    </div>
+    <div class="glass card hoverable" style="border-color:var(--back)">
+      <div class="icbox back"><svg class="ic"><use href="#i-flow"/></svg></div>
+      <h4 style="margin-top:12px">What all five share</h4>
+      <p class="tiny">A pretty half on your device, a trusted half far away, one shared source of truth, and a wall between them that only messages may cross.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 14 — ALL FIVE BEGINNER MISTAKES
+     ============================================================ -->
+<section class="ch" data-title="Mistakes">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 14</b> the five traps</p>
+    <h2>Beginner mistakes, collected.</h2>
+    <p class="lede">Each of these feels reasonable until it costs you an outage.</p>
+  </div>
+
+  <div class="stack">
+    <div class="memo miss"><div class="icbox warn"><svg class="ic"><use href="#i-db"/></svg></div>
+      <div><b>Mistake 01 — backend equals database</b><p>The database is just one piece. The backend also includes the logic, the rules, the security checks, and the way it talks to clients.</p></div></div>
+    <div class="memo miss"><div class="icbox warn"><svg class="ic"><use href="#i-server"/></svg></div>
+      <div><b>Mistake 02 — server equals backend</b><p>The server is the computer. The backend is the software running on that computer. The words are used loosely, but the distinction matters the day a stale process holds your port.</p></div></div>
+    <div class="memo miss"><div class="icbox warn"><svg class="ic"><use href="#i-shield"/></svg></div>
+      <div><b>Mistake 03 — trusting the frontend for security</b><p>Anything on the user's device can be inspected and changed by the user. Never let the frontend decide a password is correct, and never hardcode a secret key into the app.</p></div></div>
+    <div class="memo miss"><div class="icbox warn"><svg class="ic"><use href="#i-api"/></svg></div>
+      <div><b>Mistake 04 — assuming they are one program</b><p>They are two separate programs that talk to each other over the internet. Every message costs time, and any message can be lost.</p></div></div>
+    <div class="memo miss"><div class="icbox warn"><svg class="ic"><use href="#i-cog"/></svg></div>
+      <div><b>Mistake 05 — thinking backend is only writing code</b><p>It also means storing data, deploying to servers, and staying reachable over a network. An expired certificate takes a service down without a single line of code being wrong.</p></div></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 15 — LIMITATIONS AND COSTS
+     ============================================================ -->
+<section class="ch" data-title="Limitations">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 15</b> what the split costs you</p>
+    <h2>The wall is not free.</h2>
+    <p class="lede">Splitting an app in two buys safety and sharing. It charges you in latency, uncertainty and operational work.</p>
+  </div>
+
+  <div class="grid g2">
+    <div class="glass card hoverable"><div class="row"><div class="icbox warn"><svg class="ic"><use href="#i-clock"/></svg></div>
+      <div><h4>Latency is real</h4><p class="tiny">Every rule enforced on the server costs a round trip. That is why apps show an optimistic result first and correct it later.</p></div></div></div>
+    <div class="glass card hoverable"><div class="row"><div class="icbox warn"><svg class="ic"><use href="#i-nowifi"/></svg></div>
+      <div><h4>Failure can be partial</h4><p class="tiny">Your write may have succeeded while only the reply was lost. The client cannot tell the difference, so it retries.</p></div></div></div>
+    <div class="glass card hoverable"><div class="row"><div class="icbox warn"><svg class="ic"><use href="#i-api"/></svg></div>
+      <div><h4>The contract is forever</h4><p class="tiny">Old app versions keep calling your API for years. You can add to a response; you cannot quietly remove from it.</p></div></div></div>
+    <div class="glass card hoverable"><div class="row"><div class="icbox warn"><svg class="ic"><use href="#i-cog"/></svg></div>
+      <div><h4>Someone must run it</h4><p class="tiny">Deploys, migrations, certificates, backups, monitoring, capacity. None of this is code, all of it can take you offline.</p></div></div></div>
+  </div>
+
+  <div class="blk glass card">
+    <p class="eyebrow"><b>the consequence nobody warns you about</b></p>
+    <div class="grid g3" style="align-items:center">
+      <div class="box warn"><b>Reply gets lost</b><em>client has no idea</em></div>
+      <div style="text-align:center"><svg class="ic ic-lg" style="color:var(--warn)"><use href="#i-right"/></svg><p class="tiny" style="margin:0">so it retries</p></div>
+      <div class="box back"><b>Same write arrives twice</b><em>it must be safe to repeat</em></div>
+    </div>
+    <p class="small" style="margin-top:14px">This is why serious write endpoints carry an idempotency key, and why a duplicate guard that never actually persists its flag is a real bug rather than a tidy detail.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 16 — SCENARIOS
+     ============================================================ -->
+<section class="ch" data-title="Scenarios">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 16</b> three situations, explained</p>
+    <h2>Now read the world like a backend engineer.</h2>
+    <p class="lede">Press play. Each step is a real thing a server does between your tap and someone else's screen.</p>
+  </div>
+
+  <div class="glass card">
+    <div class="row" style="justify-content:space-between; margin-bottom:6px">
+      <h3>You post a photo. Your friend sees it.</h3>
+      <button class="btn ghost" id="postPlay"><svg class="ic ic-sm"><use href="#i-bolt"/></svg> Play</button>
+    </div>
+    <div class="tl" id="postTl" style="margin-top:14px">
+      <div class="tl-i"><span class="who">your device</span><b>Uploads the photo</b><em>bytes leave your phone with your token attached</em></div>
+      <div class="tl-i"><span class="who">backend</span><b>Verifies who you are</b><em>identity is checked before anything is stored</em></div>
+      <div class="tl-i"><span class="who">backend</span><b>Saves the file, then the row</b><em>the image goes to file storage, a link goes into the database</em></div>
+      <div class="tl-i"><span class="who">backend</span><b>Replies to you immediately</b><em>this is why your post appears instantly on your screen</em></div>
+      <div class="tl-i"><span class="who">backend</span><b>Fans out afterwards</b><em>thumbnails, followers' timelines, notifications</em></div>
+      <div class="tl-i"><span class="who">friend's device</span><b>Asks for the feed</b><em>and your post is now in the answer</em></div>
+    </div>
+  </div>
+
+  <div class="blk grid g2">
+    <div class="glass card">
+      <h3>"Only 2 left in stock."</h3>
+      <p class="small" style="margin-top:10px">The true count lives in one database row, because three people must all see the same number. On each phone it is only a snapshot, already out of date the instant it was drawn.</p>
+      <div class="stack" style="margin-top:14px; gap:9px">
+        <div class="box front"><b>On the phone</b><em>a photocopy — display only</em></div>
+        <div class="box data"><b>In the database</b><em>the single source of truth</em></div>
+      </div>
+    </div>
+    <div class="glass card">
+      <h3>Your internet drops for ten seconds.</h3>
+      <div class="stack" style="margin-top:14px; gap:9px">
+        <div class="box front"><b>Still works: scrolling</b><em>already in your device's memory — no network needed</em></div>
+        <div class="box warn"><b>Fails: booking a ride</b><em>needs shared state only the server may change</em></div>
+      </div>
+      <p class="small" style="margin-top:12px">Reads can be cached and degrade gently. Writes cannot. A booking that times out is genuinely ambiguous — which is exactly why retries must be safe.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 17 — INTERVIEW QUESTIONS (accordions)
+     ============================================================ -->
+<section class="ch" data-title="Interview Q&amp;A">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 17</b> answers in your own words</p>
+    <h2>Ten questions, ten short answers.</h2>
+    <p class="lede">Try answering before you open each one. Reading a good answer feels like learning; producing one is learning.</p>
+  </div>
+  <div id="accBox"></div>
+</section>
+
+<!-- ============================================================
+     CH 18 — FLASHCARDS
+     ============================================================ -->
+<section class="ch" data-title="Flashcards">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 18</b> active recall</p>
+    <h2>Flip only after you have answered.</h2>
+    <p class="lede">Six cards. Say your answer out loud first — the gap between what you can recognise and what you can produce is the whole point.</p>
+  </div>
+  <div class="grid g2" id="flashBox"></div>
+  <div class="blk row">
+    <button class="btn ghost" id="flipAll">Flip all</button>
+    <span class="tiny">Click any card to flip it.</span>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 19 — QUIZ (MCQ, true/false, fill in the blank, drag & drop)
+     ============================================================ -->
+<section class="ch" data-title="Quiz">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 19</b> check yourself</p>
+    <h2>Seven questions.</h2>
+    <p class="lede">Every answer comes with the reason, not just a tick. Score appears as you go.</p>
+  </div>
+
+  <div class="glass card" style="display:flex; align-items:center; gap:16px; padding:16px 20px">
+    <div class="icbox back"><svg class="ic"><use href="#i-check"/></svg></div>
+    <div style="flex:1"><b id="scoreTxt" style="font-size:17px; letter-spacing:-.02em">0 of 7 answered</b>
+      <div class="pbar" style="margin-top:8px"><i id="scoreFill"></i></div></div>
+    <button class="btn ghost" id="quizReset">Reset</button>
+  </div>
+
+  <div class="blk" id="quizBox"></div>
+
+  <!-- Drag &amp; drop: sort each job to the half that owns it -->
+  <div class="q blk" id="dndQ">
+    <div class="q-head"><span class="q-kind">drag &amp; drop</span>
+      <span class="q-text">Drop each job on the half that owns it. On a phone, tap a chip then tap a bucket.</span></div>
+    <div class="bank" id="bank" style="margin-bottom:14px">
+      <span class="chip" draggable="true" data-side="back">check the password</span>
+      <span class="chip" draggable="true" data-side="front">play a loading spinner</span>
+      <span class="chip" draggable="true" data-side="back">hold the stock count</span>
+      <span class="chip" draggable="true" data-side="front">show a button</span>
+      <span class="chip" draggable="true" data-side="back">sign a token</span>
+      <span class="chip" draggable="true" data-side="front">scroll a list</span>
+      <span class="chip" draggable="true" data-side="back">apply the discount rule</span>
+      <span class="chip" draggable="true" data-side="front">hide password characters</span>
+    </div>
+    <div class="dnd">
+      <div class="zone front" data-zone="front"><b>frontend — on your device</b><div class="zone-items"></div></div>
+      <div class="zone back" data-zone="back"><b>backend — on the server</b><div class="zone-items"></div></div>
+    </div>
+    <div class="fb" id="dndFb"></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 20 — SUMMARY: MIND MAP, CONCEPT MAP, FLOW DIAGRAM
+     ============================================================ -->
+<section class="ch" data-title="Maps">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 20</b> everything at once</p>
+    <h2>Three views of one idea.</h2>
+    <p class="lede">A mind map for structure, a concept map for relationships, a flow diagram for time.</p>
+  </div>
+
+  <div class="glass card">
+    <p class="eyebrow"><b>mind map</b> what the parts are</p>
+    <div class="map-wrap"><svg class="map" viewBox="0 0 780 500" role="img" aria-label="Mind map: software splits into frontend, backend, database, the wall between them, and trust.">
+      <path class="edge" d="M166 249C200 249 200 49 236 49"/><path class="edge" d="M166 249C200 249 200 149 236 149"/>
+      <path class="edge" d="M166 249C200 249 200 249 236 249"/><path class="edge" d="M166 249C200 249 200 349 236 349"/>
+      <path class="edge" d="M166 249C200 249 200 449 236 449"/>
+      <path class="edge" d="M416 49C450 49 450 29 486 29"/><path class="edge" d="M416 49C450 49 450 69 486 69"/>
+      <path class="edge" d="M416 149C450 149 450 129 486 129"/><path class="edge" d="M416 149C450 149 450 169 486 169"/>
+      <path class="edge" d="M416 249C450 249 450 229 486 229"/><path class="edge" d="M416 249C450 249 450 269 486 269"/>
+      <path class="edge" d="M416 349C450 349 450 329 486 329"/><path class="edge" d="M416 349C450 349 450 369 486 369"/>
+      <path class="edge" d="M416 449C450 449 450 429 486 429"/><path class="edge" d="M416 449C450 449 450 469 486 469"/>
+      <g class="mn"><rect x="16" y="217" width="150" height="64" rx="14" fill="var(--glass-2)" stroke="var(--line-2)"/>
+        <text class="mt" x="91" y="245" text-anchor="middle">Software</text>
+        <text class="ms" x="91" y="263" text-anchor="middle">two halves</text></g>
+      <g class="mn"><rect x="236" y="25" width="180" height="48" rx="11" fill="var(--front-soft)" stroke="var(--front)"/>
+        <text class="mt" x="250" y="54" fill="var(--front)">Frontend</text></g>
+      <g class="mn"><rect x="236" y="125" width="180" height="48" rx="11" fill="var(--back-soft)" stroke="var(--back)"/>
+        <text class="mt" x="250" y="154" fill="var(--back)">Backend</text></g>
+      <g class="mn"><rect x="236" y="225" width="180" height="48" rx="11" fill="var(--data-soft)" stroke="var(--data)"/>
+        <text class="mt" x="250" y="254" fill="var(--data)">Database</text></g>
+      <g class="mn"><rect x="236" y="325" width="180" height="48" rx="11" fill="var(--glass-2)" stroke="var(--line-2)"/>
+        <text class="mt" x="250" y="354">The wall</text></g>
+      <g class="mn"><rect x="236" y="425" width="180" height="48" rx="11" fill="var(--warn-soft)" stroke="var(--warn)"/>
+        <text class="mt" x="250" y="454" fill="var(--warn)">Trust</text></g>
+      <g class="mn"><rect x="486" y="12" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="33">runs on your device</text></g>
+      <g class="mn"><rect x="486" y="52" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="73">draws, collects, renders</text></g>
+      <g class="mn"><rect x="486" y="112" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="133">a process on a server</text></g>
+      <g class="mn"><rect x="486" y="152" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="173">rules, auth, secrets</text></g>
+      <g class="mn"><rect x="486" y="212" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="233">storage, no judgement</text></g>
+      <g class="mn"><rect x="486" y="252" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="273">the single source of truth</text></g>
+      <g class="mn"><rect x="486" y="312" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="333">request in, response out</text></g>
+      <g class="mn"><rect x="486" y="352" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="373">HTTP and JSON</text></g>
+      <g class="mn"><rect x="486" y="412" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="433">client input is a claim</text></g>
+      <g class="mn"><rect x="486" y="452" width="250" height="34" rx="8" fill="var(--glass)" stroke="var(--line)"/>
+        <text class="ms" x="498" y="473">the server re-checks it</text></g>
+    </svg></div>
+    <p class="tiny map-hint">Swipe the diagram sideways to pan.</p>
+  </div>
+
+  <div class="blk glass card">
+    <p class="eyebrow"><b>concept map</b> how the parts relate</p>
+    <div class="map-wrap"><svg class="map" viewBox="0 0 780 400" role="img" aria-label="Concept map: a user taps the frontend, which sends a request across the trust boundary to the backend, which reads and writes the database, enforces rules, and returns a response.">
+      <path class="edge dash" d="M400 120V292"/>
+      <text class="ms" x="400" y="108" text-anchor="middle" fill="var(--warn)">trust boundary</text>
+      <path class="edge" d="M160 205H192" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <text class="ms" x="176" y="194" text-anchor="middle">taps</text>
+      <path class="edge" d="M330 192H462" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <text class="ms" x="365" y="182" text-anchor="middle">request</text>
+      <path class="edge" d="M470 222H338" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <text class="ms" x="437" y="242" text-anchor="middle">response</text>
+      <path class="edge" d="M535 230V302" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <text class="ms" x="547" y="272">reads / writes</text>
+      <path class="edge" d="M600 205H632" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <g class="mn"><rect x="40" y="180" width="120" height="50" rx="11" fill="var(--front-soft)" stroke="var(--front)"/>
+        <text class="mt" x="100" y="210" text-anchor="middle" fill="var(--front)">User</text></g>
+      <g class="mn"><rect x="200" y="180" width="130" height="50" rx="11" fill="var(--front-soft)" stroke="var(--front)"/>
+        <text class="mt" x="265" y="203" text-anchor="middle" fill="var(--front)">Frontend</text>
+        <text class="ms" x="265" y="220" text-anchor="middle">your device</text></g>
+      <g class="mn"><rect x="470" y="180" width="130" height="50" rx="11" fill="var(--back-soft)" stroke="var(--back)"/>
+        <text class="mt" x="535" y="203" text-anchor="middle" fill="var(--back)">Backend</text>
+        <text class="ms" x="535" y="220" text-anchor="middle">a server</text></g>
+      <g class="mn"><rect x="470" y="302" width="130" height="50" rx="11" fill="var(--data-soft)" stroke="var(--data)"/>
+        <text class="mt" x="535" y="325" text-anchor="middle" fill="var(--data)">Database</text>
+        <text class="ms" x="535" y="342" text-anchor="middle">the truth</text></g>
+      <g class="mn"><rect x="632" y="180" width="130" height="50" rx="11" fill="var(--glass-2)" stroke="var(--line-2)"/>
+        <text class="mt" x="697" y="203" text-anchor="middle">Rules</text>
+        <text class="ms" x="697" y="220" text-anchor="middle">and checks</text></g>
+    </svg></div>
+    <p class="tiny map-hint">Swipe the diagram sideways to pan.</p>
+  </div>
+
+  <div class="blk glass card">
+    <p class="eyebrow"><b>flow diagram</b> what happens, in order</p>
+    <div class="map-wrap"><svg class="map" viewBox="0 0 780 240" role="img" aria-label="Flow diagram: tap, request, server checks, database, response, and the response travels back the same way.">
+      <path class="edge" d="M148 88H169" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <path class="edge" d="M301 88H322" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <path class="edge" d="M454 88H475" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <path class="edge" d="M607 88H628" marker-end="url(#ar)" stroke="var(--txt-3)"/>
+      <path class="edge" d="M696 116V178Q696 190 684 190H96Q84 190 84 178V120" marker-end="url(#arT)" stroke="var(--back)"/>
+      <text class="ms" x="390" y="182" text-anchor="middle" fill="var(--back)">the response travels back the same way</text>
+      <g class="mn"><rect x="20" y="60" width="128" height="56" rx="11" fill="var(--front-soft)" stroke="var(--front)"/>
+        <text class="mt" x="84" y="84" text-anchor="middle" fill="var(--front)">You tap</text>
+        <text class="ms" x="84" y="101" text-anchor="middle">frontend</text></g>
+      <g class="mn"><rect x="173" y="60" width="128" height="56" rx="11" fill="var(--glass-2)" stroke="var(--line-2)"/>
+        <text class="mt" x="237" y="84" text-anchor="middle">Request</text>
+        <text class="ms" x="237" y="101" text-anchor="middle">HTTP + JSON</text></g>
+      <g class="mn"><rect x="326" y="60" width="128" height="56" rx="11" fill="var(--back-soft)" stroke="var(--back)"/>
+        <text class="mt" x="390" y="84" text-anchor="middle" fill="var(--back)">Checks</text>
+        <text class="ms" x="390" y="101" text-anchor="middle">who, and allowed?</text></g>
+      <g class="mn"><rect x="479" y="60" width="128" height="56" rx="11" fill="var(--data-soft)" stroke="var(--data)"/>
+        <text class="mt" x="543" y="84" text-anchor="middle" fill="var(--data)">Database</text>
+        <text class="ms" x="543" y="101" text-anchor="middle">read or write</text></g>
+      <g class="mn"><rect x="632" y="60" width="128" height="56" rx="11" fill="var(--glass-2)" stroke="var(--line-2)"/>
+        <text class="mt" x="696" y="84" text-anchor="middle">Response</text>
+        <text class="ms" x="696" y="101" text-anchor="middle">status + body</text></g>
+    </svg></div>
+    <p class="tiny map-hint">Swipe the diagram sideways to pan.</p>
+  </div>
+</section>
+
+<!-- ============================================================
+     CH 21 — CHEAT SHEET + PRACTICE + ASSIGNMENT
+     ============================================================ -->
+<section class="ch" data-title="Cheat sheet">
+  <div class="ch-head">
+    <p class="eyebrow"><b>chapter 21</b> take this with you</p>
+    <h2>The whole lesson, on one card.</h2>
+  </div>
+
+  <div class="cheat">
+    <div class="cheat-r"><span>frontend</span><p>Runs on the user's device. Draws, collects input, renders answers. Never decides anything that matters.</p></div>
+    <div class="cheat-r"><span>backend</span><p>The trusted half: logic, rules, security checks, data access. A process on a machine you control.</p></div>
+    <div class="cheat-r"><span>server</span><p>The computer. Not the same word as backend. One server can run many; one backend can span many.</p></div>
+    <div class="cheat-r"><span>client</span><p>Whoever asks. A role in a conversation, not a kind of hardware.</p></div>
+    <div class="cheat-r"><span>database</span><p>Storage with no opinion. It enforces only the constraints you gave it.</p></div>
+    <div class="cheat-r"><span>request</span><p>The client's question. Method, address, headers, body.</p></div>
+    <div class="cheat-r"><span>response</span><p>The server's answer. Status code plus body.</p></div>
+    <div class="cheat-r"><span>api</span><p>The published set of questions a backend accepts. A contract you cannot quietly break.</p></div>
+    <div class="cheat-r"><span>trust rule</span><p>Client input is a claim, never a fact. Re-verify, re-compute, re-authorise on the server. Every time.</p></div>
+    <div class="cheat-r"><span>the model</span><p>Frontend is the dining area. Backend is the kitchen. Database is the pantry.</p></div>
+  </div>
+
+  <div class="blk grid g2">
+    <div class="glass card">
+      <p class="eyebrow"><b>practice</b> do these away from the screen</p>
+      <div class="stack" style="gap:11px">
+        <div class="box"><b>1. Open an app you use daily</b><em>write down three jobs the backend must own, and one the frontend owns</em></div>
+        <div class="box"><b>2. Explain both halves to a non-technical friend</b><em>one sentence each, using an analogy you invented yourself</em></div>
+      </div>
+    </div>
+    <div class="glass card">
+      <p class="eyebrow"><b>mini assignment</b> five to eight lines</p>
+      <div class="stack" style="gap:11px">
+        <div class="box back"><b>(a) three backend responsibilities</b><em>things that would break if a user could edit them</em></div>
+        <div class="box front"><b>(b) two frontend responsibilities</b><em>things that only affect what one person sees</em></div>
+        <div class="box data"><b>(c) one piece of data stored centrally</b><em>and say why every device must read the same copy</em></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="blk memo tip">
+    <div class="icbox back"><svg class="ic"><use href="#i-check"/></svg></div>
+    <div><b>The test that settles every argument</b><p>For each job you listed, ask: would this still be correct if the user hacked their own copy of the app? Anything that fails that question belongs on the server.</p></div>
+  </div>
+
+  <div class="blk glass card" style="text-align:center; padding:34px">
+    <h3>That is the entire model.</h3>
+    <p class="small" style="max-width:52ch; margin:10px auto 0">A pretty half you can touch, a trusted half you cannot, one shared truth between them, and a wall that only messages may cross.</p>
+    <div class="row" style="justify-content:center; margin-top:20px">
+      <button class="btn primary" id="restart"><svg class="ic ic-sm"><use href="#i-left"/></svg> Start over</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============================================================
+     BOTTOM NAV — previous / next / jump dots
+     ============================================================ -->
+<nav class="nav">
+  <button class="btn ghost" id="prev"><svg class="ic ic-sm"><use href="#i-left"/></svg> Back</button>
+  <div class="dots" id="dots"></div>
+  <button class="btn primary" id="next">Next <svg class="ic ic-sm"><use href="#i-right"/></svg></button>
+</nav>
+
+<script>
+/* ============================================================
+   LESSON ENGINE
+   1. helpers      2. chapter nav      3. theme
+   4. request sim  5. tamper demo      6. stock race
+   7. login sim    8. timeline player  9. accordions
+   10. flashcards  11. quiz            12. drag & drop
+   ============================================================ */
+(function(){
+'use strict';
+
+/* ---------- 1. HELPERS ---------------------------------- */
+var $  = function(s,r){ return (r||document).querySelector(s); };
+var $$ = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+var REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function wait(ms){ return new Promise(function(r){ setTimeout(r, REDUCED ? 10 : ms); }); }
+function icon(id,cls){ return '<svg class="ic '+(cls||'ic-sm')+'"><use href="#'+id+'"/></svg>'; }
+
+/* Write a line into a monospace log panel */
+function logLine(box, text, tone){
+  var d = document.createElement('div');
+  if(tone) d.className = 't-'+tone;
+  d.textContent = text;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+function logClear(box){ box.innerHTML = ''; }
+
+/* Send a packet along a wire, left→right or right→left */
+function flyPacket(el, text, back, ms){
+  el.textContent = text;
+  el.classList.toggle('up', !!back);
+  var frames = back
+    ? [{left:'100%',opacity:0},{left:'88%',opacity:1},{left:'12%',opacity:1},{left:'0%',opacity:0}]
+    : [{left:'0%',opacity:0},{left:'12%',opacity:1},{left:'88%',opacity:1},{left:'100%',opacity:0}];
+  var a = el.animate(frames, { duration: REDUCED ? 40 : ms, easing:'ease-in-out' });
+  return a.finished || new Promise(function(r){ a.onfinish = r; });
+}
+
+/* Light up timeline steps one after another */
+function playTimeline(root, delay, onStep){
+  var items = $$('.tl-i', root);
+  items.forEach(function(i){ i.classList.remove('lit'); });
+  var i = 0;
+  return new Promise(function(done){
+    (function step(){
+      if(i >= items.length){ done(); return; }
+      items[i].classList.add('lit');
+      if(onStep) onStep(i);
+      i++;
+      setTimeout(step, REDUCED ? 20 : delay);
+    })();
+  });
+}
+
+/* ---------- 2. CHAPTER NAVIGATION ----------------------- */
+var chapters = $$('.ch');
+var total = chapters.length;
+var at = 0;
+var dots = $('#dots'), blocks = $('#blocks');
+
+chapters.forEach(function(ch, i){
+  var b = document.createElement('b');
+  b.title = (i+1) + '. ' + (ch.dataset.title || '');
+  b.setAttribute('role','button');
+  b.setAttribute('aria-label','Go to chapter ' + (i+1));
+  b.addEventListener('click', function(){ go(i); });
+  dots.appendChild(b);
+});
+for(var k=0;k<8;k++) blocks.appendChild(document.createElement('i'));
+
+function go(i){
+  if(i < 0 || i >= total) return;
+  chapters[at].classList.remove('on');
+  at = i;
+  chapters[at].classList.add('on');
+  paint();
+  window.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
+}
+function paint(){
+  var pct = ((at + 1) / total) * 100;
+  $('#pfill').style.width = pct + '%';
+  $('#pbar').setAttribute('aria-valuenow', Math.round(pct));
+  $('#pcount').textContent = String(at+1).padStart(2,'0') + ' / ' + total;
+  $$('#dots b').forEach(function(b,i){
+    b.className = i === at ? 'on' : (i < at ? 'done' : '');
+  });
+  var filled = Math.round(((at+1)/total) * 8);
+  $$('#blocks i').forEach(function(b,i){ b.className = i < filled ? 'on' : ''; });
+  $('#prev').disabled = at === 0;
+  $('#next').disabled = at === total - 1;
+  $('#next').innerHTML = at === total - 2 ? 'Finish ' + icon('i-check') : 'Next ' + icon('i-right');
+}
+$('#next').addEventListener('click', function(){ go(at+1); });
+$('#prev').addEventListener('click', function(){ go(at-1); });
+$('#restart').addEventListener('click', function(){ go(0); });
+document.addEventListener('keydown', function(e){
+  var t = e.target.tagName;
+  if(t === 'INPUT' || t === 'TEXTAREA') return;
+  if(e.key === 'ArrowRight') go(at+1);
+  if(e.key === 'ArrowLeft')  go(at-1);
+});
+paint();
+
+/* ---------- 3. THEME ------------------------------------ */
+$('#theme').addEventListener('click', function(){
+  var dark = document.documentElement.dataset.theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+  this.innerHTML = icon(dark ? 'i-moon' : 'i-sun');
+});
+
+/* ---------- 4. REQUEST / RESPONSE SIMULATOR ------------- */
+var REQS = [
+  { req:['GET /feed HTTP/1.1','Host: api.example.com','Authorization: Bearer eyJhbGci...','','(no body - you are only asking)'],
+    res:['200 OK','Content-Type: application/json','','{','  "posts": [','    { "id": 91, "by": "asha" }','  ]','}'],
+    up:'GET /feed', down:'200 OK',
+    note:'A GET only asks. It changes nothing, so it is safe to repeat.' },
+  { req:['POST /login HTTP/1.1','Content-Type: application/json','','{','  "user": "bharat",','  "pass": "letmein"','}'],
+    res:['200 OK','','{','  "token": "eyJhbGciOi...",','  "expires_in": 3600','}'],
+    up:'POST /login', down:'200 + token',
+    note:'A POST changes something. The password travels up; only a signed token comes back down.' },
+  { req:['GET /invoice/8812 HTTP/1.1','Authorization: Bearer eyJhbGci...','','(this invoice belongs to someone else)'],
+    res:['403 Forbidden','','{','  "error": "not your invoice"','}'],
+    up:'GET /invoice/8812', down:'403 denied',
+    note:'The row exists - it simply is not yours. Checking that an id exists is not the same as checking that you own it.' }
+];
+var pick = 0, busy = false;
+function paintReq(){
+  var r = REQS[pick];
+  $('#rqOut').textContent = r.req.join('\n');
+  $('#rsOut').textContent = 'Press "Send it".';
+  $('#rqNote').textContent = r.note;
+  $$('#reqPicker .btn').forEach(function(b,i){
+    b.classList.toggle('primary', i === pick);
+    b.classList.toggle('ghost', i !== pick);
+  });
+}
+$$('#reqPicker .btn').forEach(function(b){
+  b.addEventListener('click', function(){ pick = +b.dataset.req; paintReq(); });
+});
+paintReq();
+
+$('#sendReq').addEventListener('click', function(){
+  if(busy) return; busy = true;
+  var r = REQS[pick];
+  $('#rsOut').textContent = 'waiting...';
+  $('#rqServer').style.borderColor = '';
+  flyPacket($('#pktA'), r.up, false, 1100)
+    .then(function(){
+      $('#rqServer').style.transform = 'scale(1.03)';
+      return wait(500);
+    })
+    .then(function(){
+      $('#rqServer').style.transform = '';
+      $('#rsOut').textContent = r.res.join('\n');
+      return flyPacket($('#pktB'), r.down, true, 1100);
+    })
+    .then(function(){ busy = false; });
+});
+
+/* ---------- 5. TAMPER DEMO (never trust the client) ----- */
+$('#tZero').addEventListener('click', function(){ $('#tSend').value = '0'; });
+
+$('#tPay').addEventListener('click', function(){
+  var trust = $('#tTrust').checked;
+  var real  = parseInt($('#tReal').value, 10);
+  var sent  = parseInt($('#tSend').value, 10);
+  if(isNaN(sent)) sent = 0;
+  var box = $('#tLog'), v = $('#tVerdict');
+  logClear(box);
+
+  logLine(box, '> POST /orders', 'front');
+  logLine(box, '  { "item": "mouse", "total": ' + sent + ' }', 'front');
+  logLine(box, '');
+
+  if(trust){
+    logLine(box, 'server: total supplied by client', 'warn');
+    logLine(box, 'server: no recompute performed', 'warn');
+    logLine(box, 'server: charging ' + sent, 'warn');
+    logLine(box, '');
+    logLine(box, '201 Created  paid=' + sent, 'warn');
+    if(sent < real){
+      logLine(box, '');
+      logLine(box, 'You just bought a ' + real + ' item for ' + sent + '.', 'warn');
+      logLine(box, 'Nobody had to hack anything. They edited a number.', 'warn');
+      v.className = 'verdict no';
+      v.innerHTML = icon('i-x') + ' Order placed for ' + sent + '. The shop lost ' + (real - sent) + '.';
+    } else {
+      v.className = 'verdict';
+      v.innerHTML = icon('i-clock') + ' Order placed for ' + sent + '. Now try setting the total to 0.';
+    }
+  } else {
+    logLine(box, 'server: ignoring the total sent by the client', 'back');
+    logLine(box, 'server: SELECT price FROM items WHERE id = ?', 'data');
+    logLine(box, 'server: price = ' + real, 'data');
+    if(sent !== real) logLine(box, 'server: claim (' + sent + ') != truth (' + real + ') -> claim discarded', 'ok');
+    logLine(box, 'server: charging ' + real, 'back');
+    logLine(box, '');
+    logLine(box, '201 Created  paid=' + real, 'ok');
+    v.className = 'verdict ok';
+    v.innerHTML = icon('i-check') + ' Order placed for ' + real + '. The client had no say in the price.';
+  }
+});
+
+/* ---------- 6. STOCK RACE ------------------------------- */
+var raceSteps = {
+  unsafe:[
+    ['t1 · shopper a','Reads the stock','gets 2'],
+    ['t2 · shopper b','Reads the stock','also gets 2 - nothing stopped them'],
+    ['t3 · shopper a','Writes 2 - 1 = 1','stock becomes 1'],
+    ['t4 · shopper b','Writes 2 - 1 = 1','B never saw A\'s write, so 1 is written again'],
+    ['result','Two units shipped. The count says 1.','You will now sell a unit that does not exist.']
+  ],
+  safe:[
+    ['t1 · shopper a','Asks the database to decrement','one atomic step, condition included'],
+    ['t2 · shopper b','Asks the database to decrement','queues behind A on the same row'],
+    ['t3 · database','A succeeds: 2 becomes 1','no gap for anyone to slip into'],
+    ['t4 · database','B succeeds: 1 becomes 0','B read and wrote in the same instruction'],
+    ['result','Two units shipped. The count says 0.','Correct. A third buyer is now refused.']
+  ]
+};
+function paintRace(mode){
+  var items = $$('#raceTl .tl-i');
+  raceSteps[mode].forEach(function(s,i){
+    var it = items[i]; if(!it) return;
+    $('.who', it).textContent = s[0];
+    it.querySelector('b').textContent = s[1];
+    it.querySelector('em').textContent = s[2];
+  });
+}
+function resetRace(){
+  $('#stockN').textContent = '2';
+  $('#sa').textContent = 'sees: -';
+  $('#sb').textContent = 'sees: -';
+  $$('#raceTl .tl-i').forEach(function(i){ i.classList.remove('lit'); });
+  paintRace($('#safeMode').checked ? 'safe' : 'unsafe');
+}
+$('#safeMode').addEventListener('change', resetRace);
+$('#raceReset').addEventListener('click', resetRace);
+$('#raceBtn').addEventListener('click', function(){
+  var safe = $('#safeMode').checked;
+  resetRace();
+  var b = this; b.disabled = true;
+  playTimeline($('#raceTl'), 900, function(i){
+    if(i === 0) $('#sa').textContent = 'sees: 2';
+    if(i === 1) $('#sb').textContent = safe ? 'sees: 2' : 'sees: 2 (stale)';
+    if(i === 2) $('#stockN').textContent = '1';
+    if(i === 3) $('#stockN').textContent = safe ? '0' : '1';
+    if(i === 4){
+      var n = $('#stockN');
+      n.style.color = safe ? 'var(--ok)' : 'var(--warn)';
+      setTimeout(function(){ n.style.color = ''; }, 1400);
+    }
+  }).then(function(){ b.disabled = false; });
+});
+resetRace();
+
+/* ---------- 7. LOGIN SIMULATION ------------------------- */
+$('#lgo').addEventListener('click', function(){
+  var ok = $('#lp').value === 'letmein';
+  var user = $('#lu').value || 'anonymous';
+  var v = $('#lv'), b = this;
+  b.disabled = true;
+  v.className = 'verdict';
+  v.innerHTML = icon('i-clock') + ' Sending...';
+  var items = $$('#ltl .tl-i');
+  playTimeline($('#ltl'), 780, function(i){
+    if(i === 3) items[3].querySelector('em').textContent =
+      'hashes "' + '•'.repeat($('#lp').value.length) + '", compares hash to hash';
+    if(i === 4) items[4].querySelector('em').textContent =
+      'SELECT hash FROM users WHERE name = "' + user + '"';
+    if(i === 5) items[5].querySelector('em').textContent = ok
+      ? 'match - signs a token that only this server can verify'
+      : 'no match - returns 401, and no token is created';
+    if(i === 6) items[6].querySelector('em').textContent = ok
+      ? 'stores the token, moves to the next screen'
+      : 'shows an error - it was told no, and it obeys';
+  }).then(function(){
+    if(ok){ v.className = 'verdict ok'; v.innerHTML = icon('i-check') + ' Signed in as ' + user + '.'; }
+    else  { v.className = 'verdict no'; v.innerHTML = icon('i-x') + ' Rejected. The server decided, not the app.'; }
+    b.disabled = false;
+  });
+});
+
+/* ---------- 8. PHOTO POST TIMELINE ---------------------- */
+$('#postPlay').addEventListener('click', function(){
+  var b = this; b.disabled = true;
+  playTimeline($('#postTl'), 850).then(function(){ b.disabled = false; });
+});
+
+/* ---------- 9. INTERVIEW ACCORDIONS -------------------- */
+var QA = [
+  ['In your own words, what is the backend, and where does it run?',
+   ['The trusted half of an application: the logic, the rules, the security checks and the data access.',
+    'It runs as a process on a machine you control - not on the user\'s device.']],
+  ['What is the difference between a client and a server?',
+   ['The client asks, the server answers. It is a role in a conversation, not a type of hardware.',
+    'Your backend is a server to the browser and a client to the database, in the same request.']],
+  ['Name two problems a backend solves that a single device could not solve alone.',
+   ['Shared state: my phone cannot hold data your phone needs to read.',
+    'Trusted enforcement: my phone cannot be trusted to decide my own salary or my own discount.',
+    'A third, if you want it: work the device cannot do - secret keys, heavy computation, jobs that run while every app is closed.']],
+  ['Why is it unsafe to let the frontend decide whether a password is correct?',
+   ['Because the check would run on hardware the attacker controls, and it would need the correct value to compare against - so you would be shipping the secret to the person you are keeping out.',
+    'The server stores a one-way hash, compares on its side, and hands back a signed token.']],
+  ['Is the database the same thing as the backend?',
+   ['No. The database is a component the backend uses for storage.',
+    'The backend decides what to store and whether an operation is allowed. The database only guarantees it is stored correctly and durably.']],
+  ['You post a photo and your friend sees it seconds later. What did the backend do?',
+   ['Verified your token, stored the image file, wrote a row pointing at it, and replied to you immediately.',
+    'Then, after replying: generated thumbnails, pushed the post into your followers\' feeds, and sent notifications.',
+    'Your friend\'s app asked for its feed and your post was in the answer.']],
+  ['An app says "only 2 left in stock". Where does the true count live, and why not on each phone?',
+   ['In one row, in one database, because three different people must all see the same number.',
+    'On a phone it is only a snapshot - already out of date the instant it was drawn, and editable by its owner.']],
+  ['Your internet drops for ten seconds. Why do some things still work?',
+   ['Scrolling works because those screens are already in your device\'s memory; rendering needs no network.',
+    'Booking fails because it changes shared state that only the server may change.',
+    'Reads can be cached and degrade gently. Writes cannot - and a write that times out is genuinely ambiguous, which is why retries must be safe to repeat.']],
+  ['A notes app must sync between phone and laptop. Why a backend, and what two jobs?',
+   ['Because two devices have no way to reach each other\'s storage, and "my notes" requires knowing who "I" am.',
+    'Job one: authenticate the user and scope every read and write to the owning account.',
+    'Job two: hold the notes as the single source of truth, with a version or timestamp so two offline edits can be reconciled instead of silently overwriting each other.']],
+  ['A game keeps high scores on each device. What breaks when you want a global leaderboard?',
+   ['No device can see the others, so there is no global ranking to compute.',
+    'The player can edit their own score, the score dies with a reinstall, and there is no single identity across devices.',
+    'Moving storage to a backend buys authority, validation, durability, one identity per player, and the ability to answer "top 100" at all.']]
+];
+$('#accBox').innerHTML = QA.map(function(qa,i){
+  return '<div class="acc"><button class="acc-q" aria-expanded="false">' +
+    '<span class="num">' + String(i+1).padStart(2,'0') + '</span>' +
+    '<span>' + qa[0] + '</span>' + icon('i-chev','ic-sm chev') + '</button>' +
+    '<div class="acc-a"><div class="acc-a-in">' +
+    qa[1].map(function(p){ return '<p>' + p + '</p>'; }).join('') +
+    '</div></div></div>';
+}).join('');
+$$('#accBox .acc-q').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var acc = btn.parentNode, panel = $('.acc-a', acc), open = acc.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    panel.style.maxHeight = open ? panel.scrollHeight + 'px' : '0px';
+  });
+});
+
+/* ---------- 10. FLASHCARDS ----------------------------- */
+var CARDS = [
+  ['What is the backend, and where does it run?','The trusted half - logic, rules, checks, data access - running as a process on a machine the user does not control.'],
+  ['Client vs server, in one line.','The one that asks vs the one that answers. A role in a conversation, not a kind of hardware.'],
+  ['Why can a frontend never check a password?','It would need the correct value to compare against, on a machine the attacker owns. You would be handing over the secret.'],
+  ['Is the database the backend?','No. Storage is one component. The backend decides; the database only stores what it is told, correctly and durably.'],
+  ['Two things a single device cannot do alone.','Hold state that other people must read, and enforce a rule against its own owner.'],
+  ['The mental model, three words.','Dining area, kitchen, pantry. Frontend, backend, database.']
+];
+$('#flashBox').innerHTML = CARDS.map(function(c){
+  return '<button class="flash"><div class="flash-in">' +
+    '<div class="flash-f"><span class="flash-hint">question</span>' +
+      '<div class="flash-q">' + c[0] + '</div>' +
+      '<span class="flash-hint">click to reveal</span></div>' +
+    '<div class="flash-b"><span class="flash-hint">answer</span>' +
+      '<div class="flash-a">' + c[1] + '</div></div>' +
+    '</div></button>';
+}).join('');
+$$('.flash').forEach(function(f){
+  f.addEventListener('click', function(){ f.classList.toggle('flip'); });
+});
+$('#flipAll').addEventListener('click', function(){
+  var any = $$('.flash').some(function(f){ return !f.classList.contains('flip'); });
+  $$('.flash').forEach(function(f){ f.classList.toggle('flip', any); });
+});
+
+/* ---------- 11. QUIZ ----------------------------------- */
+var QUIZ = [
+  { kind:'true / false', q:'The backend runs on your phone.',
+    opts:['True','False'], a:1,
+    why:'False. It runs on a server, far away. Your phone runs the frontend - which is why switching your phone off does not switch the app off for anyone else.' },
+  { kind:'fill in the blank', type:'blank',
+    q:'The device that asks is the ______, and the computer that answers is the ______.',
+    a:['client','server'],
+    why:'Client asks, server answers. Remember they are roles: your backend is a server to the browser and a client to the database.' },
+  { kind:'multiple choice', q:'Which of these is the backend\'s job, not the frontend\'s?',
+    opts:['Showing a button on screen','Checking whether a password is correct','Animating a page transition','Hiding password characters as you type'],
+    a:1,
+    why:'Only the password check decides something that must not be editable by the user. The other three change what one person sees - that is presentation.' },
+  { kind:'multiple choice', q:'A shop shows "only 2 left". Where does the true count live?',
+    opts:['On each shopper\'s phone','In one row in the database on the server','In the browser cache','In the frontend source code'],
+    a:1,
+    why:'Three different shoppers must see the same number, so it lives in one row that all of them read. On a phone it is only a snapshot, already out of date.' },
+  { kind:'true / false', q:'Greying out a button is enough to stop someone using that feature.',
+    opts:['True','False'], a:1,
+    why:'False. The endpoint behind the button is still reachable by anyone who calls your API directly and skips your interface entirely. Hidden UI is not authorisation.' },
+  { kind:'multiple choice', q:'Why must a write endpoint be safe to call twice?',
+    opts:['To make it run faster','Because a lost response makes the client retry','Because databases dislike single writes','To use less memory on the server'],
+    a:1,
+    why:'The network can drop the reply after the write already succeeded. The client cannot tell, so it retries - and the second identical call must not double the effect.' }
+];
+var answered = {}, TOTALQ = QUIZ.length + 1;
+
+function scorePaint(){
+  var n = Object.keys(answered).length;
+  $('#scoreTxt').textContent = n + ' of ' + TOTALQ + ' answered' +
+    (n === TOTALQ ? ' - done.' : '');
+  $('#scoreFill').style.width = (n / TOTALQ * 100) + '%';
+}
+$('#quizBox').innerHTML = QUIZ.map(function(q,i){
+  var body;
+  if(q.type === 'blank'){
+    body = '<div class="row" style="gap:10px; margin-top:6px">' +
+      '<input class="blank" data-b="0" placeholder="answer 1" aria-label="first blank">' +
+      '<input class="blank" data-b="1" placeholder="answer 2" aria-label="second blank">' +
+      '<button class="btn ghost" data-check="' + i + '">Check</button></div>';
+  } else {
+    body = q.opts.map(function(o,j){
+      return '<button class="opt" data-q="' + i + '" data-o="' + j + '">' +
+        '<span class="key">' + String.fromCharCode(65+j) + '</span><span>' + o + '</span></button>';
+    }).join('');
+  }
+  return '<div class="q" data-qi="' + i + '"><div class="q-head">' +
+    '<span class="q-kind">' + q.kind + '</span>' +
+    '<span class="q-text">' + q.q + '</span></div>' +
+    body + '<div class="fb"></div></div>';
+}).join('');
+
+function reveal(qi, correct){
+  var card = $('.q[data-qi="' + qi + '"]');
+  var fb = $('.fb', card);
+  fb.className = 'fb show ' + (correct ? 'good' : 'bad');
+  fb.innerHTML = '<b>' + (correct ? 'Correct.' : 'Not quite.') + '</b> ' + QUIZ[qi].why;
+  answered[qi] = correct;
+  scorePaint();
+}
+$$('#quizBox .opt').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var qi = +btn.dataset.q, oi = +btn.dataset.o, q = QUIZ[qi];
+    if(answered[qi] !== undefined) return;
+    var card = $('.q[data-qi="' + qi + '"]');
+    $$('.opt', card).forEach(function(b){
+      b.disabled = true;
+      if(+b.dataset.o === q.a) b.classList.add('right');
+    });
+    if(oi !== q.a) btn.classList.add('wrong');
+    reveal(qi, oi === q.a);
+  });
+});
+$$('#quizBox [data-check]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var qi = +btn.dataset.check, card = $('.q[data-qi="' + qi + '"]');
+    var ins = $$('.blank', card);
+    var got = ins.map(function(x){ return x.value.trim().toLowerCase(); });
+    var ok = got[0] === QUIZ[qi].a[0] && got[1] === QUIZ[qi].a[1];
+    ins.forEach(function(x,j){
+      x.style.borderColor = got[j] === QUIZ[qi].a[j] ? 'var(--ok)' : 'var(--warn)';
+    });
+    reveal(qi, ok);
+  });
+});
+
+/* ---------- 12. DRAG & DROP (with tap fallback) --------- */
+var picked = null;
+function placeChip(chip, zoneEl){
+  var right = chip.dataset.side === zoneEl.dataset.zone;
+  var tag = document.createElement('span');
+  tag.className = 'drop ' + (right ? 'ok' : 'no');
+  tag.textContent = chip.textContent + (right ? '' : ' — wrong half');
+  $('.zone-items', zoneEl).appendChild(tag);
+  chip.classList.add('placed');
+  chip.classList.remove('sel');
+  picked = null;
+  var left = $$('#bank .chip').filter(function(c){ return !c.classList.contains('placed'); });
+  if(left.length === 0){
+    var wrong = $$('#dndQ .drop.no').length;
+    var fb = $('#dndFb');
+    fb.className = 'fb show ' + (wrong === 0 ? 'good' : 'bad');
+    fb.innerHTML = wrong === 0
+      ? '<b>All eight correct.</b> The test you used, whether you noticed or not: would this still be right if the user rewrote their own copy of the app? If no, it belongs on the server.'
+      : '<b>' + wrong + ' in the wrong half.</b> Anything that only changes what one person sees is frontend. Anything that decides, stores or authorises is backend.';
+    answered['dnd'] = wrong === 0;
+    scorePaint();
+  }
+}
+$$('#bank .chip').forEach(function(chip){
+  chip.addEventListener('dragstart', function(e){
+    picked = chip;
+    e.dataTransfer.setData('text/plain','x');
+  });
+  chip.addEventListener('click', function(){
+    if(chip.classList.contains('placed')) return;
+    if(picked) picked.classList.remove('sel');
+    picked = (picked === chip) ? null : chip;
+    if(picked) chip.classList.add('sel');
+  });
+});
+$$('#dndQ .zone').forEach(function(zone){
+  zone.addEventListener('dragover', function(e){ e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', function(){ zone.classList.remove('over'); });
+  zone.addEventListener('drop', function(e){
+    e.preventDefault(); zone.classList.remove('over');
+    if(picked) placeChip(picked, zone);
+  });
+  zone.addEventListener('click', function(){ if(picked) placeChip(picked, zone); });
+});
+$('#quizReset').addEventListener('click', function(){
+  answered = {};
+  scorePaint();
+  $$('#quizBox .opt').forEach(function(b){ b.disabled = false; b.className = 'opt'; });
+  $$('#quizBox .blank').forEach(function(b){ b.value = ''; b.style.borderColor = ''; });
+  $$('.fb').forEach(function(f){ f.className = 'fb'; f.innerHTML = ''; });
+  $$('#dndQ .zone-items').forEach(function(z){ z.innerHTML = ''; });
+  $$('#bank .chip').forEach(function(c){ c.className = 'chip'; });
+  picked = null;
+});
+scorePaint();
+
+})();
+</script>
+</body>
+</html>
