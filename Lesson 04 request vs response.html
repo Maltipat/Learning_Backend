@@ -1,0 +1,2490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 4 — Request vs Response</title>
+<meta name="description" content="An interactive beginner lesson on requests and responses: what each message is, what is inside it, what status codes mean, and what happens when the answer never arrives.">
+<style>
+/* ══════════════════════════════════════════════════════════════
+   1 · DESIGN TOKENS
+   This lesson is about two messages travelling in opposite
+   directions, so the page runs on a single directional contrast:
+      VERMILION = the request   (going out, hot, impatient)
+      CITRON    = the response  (coming back, bright, arriving)
+      VIOLET    = processing    (server and backend work)
+      STEEL     = stored data   (the database)
+      ROSE      = failure       (errors, timeouts, 5xx)
+   ══════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#080D0C; --bg2:#0D1413; --bg3:#131C1A;
+  --glass:rgba(255,255,255,.04); --glass2:rgba(255,255,255,.075);
+  --line:rgba(170,215,200,.14); --line2:rgba(170,215,200,.3);
+  --tx:#EAF3F0; --tx2:#98AFA9; --tx3:#6C837D;
+  --rq:#FF7A45; --rs:#B7E24A; --sv:#A78BFA; --db:#63B4E8; --er:#FF5470; --ok:#B7E24A;
+  --rq-s:rgba(255,122,69,.13); --rs-s:rgba(183,226,74,.13); --sv-s:rgba(167,139,250,.14);
+  --db-s:rgba(99,180,232,.13); --er-s:rgba(255,84,112,.13);
+  --fs:system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --fm:ui-monospace,"SF Mono",SFMono-Regular,"Cascadia Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --fq:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --r:14px; --rl:20px;
+  --sh:0 24px 64px -26px rgba(0,0,0,.9);
+  --side:272px; --top:52px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   2 · RESET & ATMOSPHERE
+   ══════════════════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:78px}
+body{margin:0; background:var(--bg); color:var(--tx); font-family:var(--fs); font-size:16.5px;
+     line-height:1.68; -webkit-font-smoothing:antialiased; overflow-x:hidden}
+.sky{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden}
+.sky b{position:absolute; border-radius:50%; filter:blur(105px); display:block}
+.sky b:nth-child(1){width:56vw;height:56vw;left:-18vw;top:-16vw;background:radial-gradient(circle,rgba(255,122,69,.19),transparent 68%)}
+.sky b:nth-child(2){width:62vw;height:62vw;right:-20vw;top:10vh;background:radial-gradient(circle,rgba(183,226,74,.15),transparent 68%)}
+.sky b:nth-child(3){width:52vw;height:52vw;left:28vw;bottom:-22vw;background:radial-gradient(circle,rgba(167,139,250,.18),transparent 70%)}
+.mesh{position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.45;
+  background-image:linear-gradient(90deg,var(--line) 1px,transparent 1px); background-size:48px 48px;
+  -webkit-mask-image:radial-gradient(ellipse 94% 70% at 50% 24%,#000 4%,transparent 78%);
+  mask-image:radial-gradient(ellipse 94% 70% at 50% 24%,#000 4%,transparent 78%)}
+
+/* ══════════════════════════════════════════════════════════════
+   3 · TYPE
+   ══════════════════════════════════════════════════════════════ */
+h1,h2,h3,h4{margin:0; font-weight:800; letter-spacing:-.033em; line-height:1.08}
+h1{font-size:clamp(38px,7.1vw,74px)}
+h2{font-size:clamp(27px,4.2vw,42px)}
+h3{font-size:clamp(19px,2.3vw,24px); letter-spacing:-.024em; line-height:1.22}
+h4{font-size:16.5px; letter-spacing:-.012em; line-height:1.3; font-weight:700}
+p{margin:9px 0 0}
+.lede{font-size:clamp(16px,2vw,19px); color:var(--tx2); max-width:63ch; margin-top:15px}
+.sm{font-size:14.5px; color:var(--tx2); line-height:1.62}
+.xs{font-size:12.8px; color:var(--tx3); line-height:1.55}
+.mono{font-family:var(--fm)}
+.eb{display:flex; align-items:center; gap:12px; margin:0 0 14px}
+.eb i{font-style:normal; font-family:var(--fm); font-size:11.5px; font-weight:600; color:var(--rq);
+      border:1px solid var(--line2); background:var(--rq-s); border-radius:7px; padding:3px 8px}
+.eb span{font-family:var(--fm); font-size:11.5px; letter-spacing:.2em; text-transform:uppercase; color:var(--tx3)}
+.eb::after{content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--line2),transparent)}
+code{font-family:var(--fm); font-size:.87em; padding:2px 6px; border-radius:6px;
+     background:var(--glass2); border:1px solid var(--line); color:var(--tx)}
+.k-rq{color:var(--rq)} .k-rs{color:var(--rs)} .k-sv{color:var(--sv)}
+.k-db{color:var(--db)} .k-er{color:var(--er)}
+.trick{font-family:var(--fq); font-style:italic; font-size:19.5px; line-height:1.5; color:var(--tx)}
+
+/* ══════════════════════════════════════════════════════════════
+   4 · SHELL
+   ══════════════════════════════════════════════════════════════ */
+.top{position:fixed; top:0; left:0; right:0; height:var(--top); z-index:70; display:flex; align-items:center;
+  gap:14px; padding:0 16px; background:rgba(8,13,12,.85); backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px); border-bottom:1px solid var(--line)}
+.top .tg{font-family:var(--fm); font-size:11.5px; letter-spacing:.16em; text-transform:uppercase;
+         color:var(--tx3); white-space:nowrap}
+.top .tg b{color:var(--rq); font-weight:500}
+.rail{flex:1; height:5px; border-radius:99px; background:var(--glass2); border:1px solid var(--line); overflow:hidden}
+.rail i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--rq),var(--sv),var(--rs))}
+.pct{font-family:var(--fm); font-size:12px; color:var(--tx2); min-width:42px; text-align:right}
+.burger{display:none; width:34px; height:34px; border-radius:9px; align-items:center; justify-content:center;
+        background:var(--glass); border:1px solid var(--line); color:var(--tx2); cursor:pointer}
+.shell{position:relative; z-index:1; display:grid; grid-template-columns:var(--side) minmax(0,1fr);
+       max-width:1340px; margin:0 auto; padding-top:var(--top)}
+.side{position:sticky; top:var(--top); height:calc(100vh - var(--top)); overflow-y:auto;
+      padding:20px 13px 40px; border-right:1px solid var(--line)}
+.side::-webkit-scrollbar{width:6px}
+.side::-webkit-scrollbar-thumb{background:var(--line2); border-radius:9px}
+.ring{display:flex; align-items:center; gap:12px; padding:0 8px 14px; margin-bottom:11px; border-bottom:1px solid var(--line)}
+.ring svg{width:46px; height:46px; flex:none; transform:rotate(-90deg)}
+.ring .bg{stroke:var(--line2)} .ring .fg{stroke:var(--rq); transition:stroke-dashoffset .3s linear}
+.ring b{display:block; font-size:14px; letter-spacing:-.02em}
+.ring span{font-family:var(--fm); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--tx3)}
+.nav a{display:flex; gap:9px; align-items:baseline; padding:6px 9px; border-radius:9px; color:var(--tx2);
+  text-decoration:none; font-size:13.4px; line-height:1.34; border-left:2px solid transparent; transition:.2s}
+.nav a em{font-family:var(--fm); font-style:normal; font-size:10.5px; color:var(--tx3); flex:none; width:17px}
+.nav a:hover{background:var(--glass2); color:var(--tx)}
+.nav a.on{background:var(--rq-s); color:var(--rq); border-left-color:var(--rq)}
+.nav a.on em{color:var(--rq)}
+.nav a.seen em::after{content:"✓"; margin-left:1px; color:var(--rs)}
+.main{min-width:0; padding:0 26px 120px}
+
+/* ══════════════════════════════════════════════════════════════
+   5 · SECTIONS + REVEAL
+   ══════════════════════════════════════════════════════════════ */
+.sec{padding:62px 0 10px; scroll-margin-top:72px}
+.sec:first-child{padding-top:32px}
+.rv{opacity:0; transform:translateY(24px);
+    transition:opacity .7s cubic-bezier(.2,.8,.2,1),transform .7s cubic-bezier(.2,.8,.2,1)}
+.rv.in{opacity:1; transform:none}
+.rv.d1{transition-delay:.07s} .rv.d2{transition-delay:.14s} .rv.d3{transition-delay:.21s}
+.rv.d4{transition-delay:.28s} .rv.d5{transition-delay:.35s}
+.blk{margin-top:20px}
+.grid{display:grid; gap:15px}
+.g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.row{display:flex; gap:11px; flex-wrap:wrap; align-items:center}
+.between{justify-content:space-between}
+.stack{display:flex; flex-direction:column; gap:13px}
+
+/* ══════════════════════════════════════════════════════════════
+   6 · PANELS, CHIPS, CARDS
+   ══════════════════════════════════════════════════════════════ */
+.pane{background:var(--glass); border:1px solid var(--line); border-radius:var(--rl);
+  backdrop-filter:blur(20px) saturate(150%); -webkit-backdrop-filter:blur(20px) saturate(150%);
+  box-shadow:var(--sh); position:relative; overflow:hidden}
+.pane::before{content:""; position:absolute; inset:0 0 auto; height:1px;
+  background:linear-gradient(90deg,transparent,var(--line2) 18%,var(--line2) 82%,transparent)}
+.pad{padding:22px}
+.hov{transition:transform .4s cubic-bezier(.2,.8,.2,1),border-color .3s,background .3s}
+.hov:hover{transform:translateY(-6px); border-color:var(--line2); background:var(--glass2)}
+.hov:hover .ic{transform:scale(1.14) rotate(-6deg)}
+.ic{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;
+    stroke-linejoin:round;transition:transform .42s cubic-bezier(.2,.8,.2,1)}
+.ic-s{width:18px;height:18px} .ic-l{width:34px;height:34px}
+.cb{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;flex:none;
+    border:1px solid var(--line2);background:var(--glass2);color:var(--tx2)}
+.cb.rq{color:var(--rq);background:var(--rq-s);border-color:var(--rq)}
+.cb.rs{color:var(--rs);background:var(--rs-s);border-color:var(--rs)}
+.cb.sv{color:var(--sv);background:var(--sv-s);border-color:var(--sv)}
+.cb.db{color:var(--db);background:var(--db-s);border-color:var(--db)}
+.cb.er{color:var(--er);background:var(--er-s);border-color:var(--er)}
+.tp{font-family:var(--fm); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; padding:5px 10px;
+    border-radius:99px; border:1px solid var(--line2); color:var(--tx2); background:var(--glass);
+    white-space:nowrap; display:inline-block}
+.tp.rq{color:var(--rq);border-color:var(--rq);background:var(--rq-s)}
+.tp.rs{color:var(--rs);border-color:var(--rs);background:var(--rs-s)}
+.tp.sv{color:var(--sv);border-color:var(--sv);background:var(--sv-s)}
+.tp.db{color:var(--db);border-color:var(--db);background:var(--db-s)}
+.tp.er{color:var(--er);border-color:var(--er);background:var(--er-s)}
+.def{border:1px solid var(--line); border-radius:var(--r); padding:13px 15px; background:var(--glass2); transition:.3s}
+.def:hover{border-color:var(--sv); transform:translateY(-3px)}
+.def b{display:block; font-size:15px; letter-spacing:-.015em}
+.def b span{font-family:var(--fm); font-size:10.5px; color:var(--tx3); letter-spacing:.09em; margin-left:7px}
+.def p{margin:4px 0 0; font-size:13.8px; color:var(--tx2); line-height:1.55}
+.note{border-radius:var(--r); padding:15px 17px; border:1px solid var(--line2); background:var(--glass2);
+  border-left:3px solid var(--tx3); display:flex; gap:13px; align-items:flex-start; transition:.3s}
+.note:hover{transform:translateX(4px)}
+.note .cb{width:34px;height:34px;border-radius:10px}
+.note .cb .ic{width:19px;height:19px}
+.note b{display:block; font-family:var(--fm); font-size:10.5px; letter-spacing:.15em;
+        text-transform:uppercase; margin-bottom:3px}
+.note p{margin:0; font-size:14.5px; color:var(--tx2); line-height:1.56}
+.note.q{border-left-color:var(--rq)} .note.q b{color:var(--rq)}
+.note.s{border-left-color:var(--rs)} .note.s b{color:var(--rs)}
+.note.v{border-left-color:var(--sv)} .note.v b{color:var(--sv)}
+.note.e{border-left-color:var(--er)} .note.e b{color:var(--er)}
+
+/* ══════════════════════════════════════════════════════════════
+   7 · THE ENVELOPE PAIR — signature component
+   One outbound message, one inbound message, always side by side.
+   ══════════════════════════════════════════════════════════════ */
+.env{border-radius:var(--r); border:1px solid var(--line2); background:var(--bg2); overflow:hidden}
+.env.out{border-color:var(--rq)} .env.in{border-color:var(--rs)}
+.env-h{display:flex; align-items:center; gap:9px; padding:11px 14px; border-bottom:1px solid var(--line);
+       font-family:var(--fm); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase}
+.env.out .env-h{color:var(--rq); background:var(--rq-s)}
+.env.in  .env-h{color:var(--rs); background:var(--rs-s)}
+.env-h span{margin-left:auto; letter-spacing:.06em; text-transform:none; color:var(--tx3)}
+pre.raw{font-family:var(--fm); font-size:12.6px; line-height:1.78; margin:0; padding:15px 16px;
+        color:var(--tx2); overflow-x:auto; white-space:pre; tab-size:2}
+.hl{border-radius:4px; padding:1px 2px; transition:.25s; cursor:pointer}
+.hl:hover{background:var(--glass2)}
+.hl.on{background:var(--rq-s); color:var(--rq); box-shadow:0 0 0 1px var(--rq); font-weight:600}
+.env.in .hl.on{background:var(--rs-s); color:var(--rs); box-shadow:0 0 0 1px var(--rs)}
+.parts{display:flex; flex-wrap:wrap; gap:8px}
+.part{font-family:var(--fm); font-size:11.5px; letter-spacing:.09em; text-transform:uppercase;
+      padding:7px 11px; border-radius:9px; border:1px solid var(--line2); background:var(--glass2);
+      color:var(--tx2); cursor:pointer; transition:.22s}
+.part:hover{border-color:var(--tx3); color:var(--tx); transform:translateY(-2px)}
+.part.on{border-color:var(--rq); background:var(--rq-s); color:var(--rq)}
+.parts.resp .part.on{border-color:var(--rs); background:var(--rs-s); color:var(--rs)}
+
+/* status code explorer */
+.codes{display:flex; flex-wrap:wrap; gap:8px}
+.code{font-family:var(--fm); font-size:13px; font-weight:700; padding:9px 13px; border-radius:10px;
+      border:1px solid var(--line2); background:var(--glass2); color:var(--tx2); cursor:pointer; transition:.22s}
+.code:hover{transform:translateY(-3px)}
+.code.f2{color:var(--rs); border-color:var(--rs)} .code.f3{color:var(--db); border-color:var(--db)}
+.code.f4{color:var(--rq); border-color:var(--rq)} .code.f5{color:var(--er); border-color:var(--er)}
+.code.on{box-shadow:0 0 0 2px currentColor}
+
+/* ══════════════════════════════════════════════════════════════
+   8 · DIALOGUE LEDGER
+   ══════════════════════════════════════════════════════════════ */
+.duo{border-radius:var(--r); border:1px solid var(--line); background:var(--bg2); padding:16px;
+     display:flex; flex-direction:column; gap:9px; min-height:150px}
+.duo .hd{display:flex; justify-content:space-between; padding-bottom:11px; border-bottom:1px solid var(--line);
+         font-family:var(--fm); font-size:10px; letter-spacing:.15em; text-transform:uppercase}
+.duo .hd span:first-child{color:var(--rq)} .duo .hd span:last-child{color:var(--sv)}
+.turn{max-width:84%; padding:9px 13px; border-radius:12px; font-size:13.6px; line-height:1.5;
+      animation:pop .38s cubic-bezier(.2,.9,.3,1) both}
+.turn.c{align-self:flex-start; background:var(--rq-s); border:1px solid var(--rq); color:var(--rq);
+        border-bottom-left-radius:4px}
+.turn.s{align-self:flex-end; background:var(--sv-s); border:1px solid var(--sv); color:var(--sv);
+        border-bottom-right-radius:4px}
+.turn.r{align-self:flex-start; background:var(--rs-s); border:1px solid var(--rs); color:var(--rs);
+        border-bottom-left-radius:4px}
+.turn.d{align-self:flex-end; background:var(--db-s); border:1px solid var(--db); color:var(--db); margin-right:22px}
+.turn.x{align-self:center; background:var(--er-s); border:1px solid var(--er); color:var(--er); text-align:center}
+.turn.n{align-self:center; border:1px dashed var(--line2); color:var(--tx3); background:transparent;
+        font-family:var(--fm); font-size:11.5px}
+.turn em{font-style:normal; display:block; font-family:var(--fm); font-size:10.5px; opacity:.75; margin-top:2px}
+@keyframes pop{from{opacity:0; transform:translateY(9px) scale(.97)} to{opacity:1; transform:none}}
+
+/* ══════════════════════════════════════════════════════════════
+   9 · ROUTE, STATIONS, PACKETS
+   ══════════════════════════════════════════════════════════════ */
+.pipe{position:relative; padding:6px 0 4px}
+.route{display:flex; overflow-x:auto; padding:8px 2px 14px}
+.stn{flex:1 0 112px; min-width:112px; border:1px solid var(--line2); border-radius:var(--r);
+     background:var(--bg2); padding:12px 11px; position:relative; transition:.34s cubic-bezier(.2,.8,.2,1)}
+.stn + .stn{margin-left:24px}
+.stn::after{content:""; position:absolute; right:-25px; top:50%; width:25px; height:1px;
+  background:repeating-linear-gradient(90deg,var(--line2) 0 5px,transparent 5px 10px)}
+.stn:last-child::after{display:none}
+.grid > .stn::after{display:none}
+.stn .led{width:7px;height:7px;border-radius:50%;background:var(--line2);margin-bottom:9px;transition:.3s}
+.stn b{display:block; font-size:13.2px; letter-spacing:-.012em}
+.stn em{font-style:normal; display:block; font-family:var(--fm); font-size:9.5px; color:var(--tx3);
+        letter-spacing:.06em; text-transform:uppercase; margin-top:3px}
+.stn.rq{border-color:var(--rq)} .stn.rq b{color:var(--rq)}
+.stn.rs{border-color:var(--rs)} .stn.rs b{color:var(--rs)}
+.stn.sv{border-color:var(--sv)} .stn.sv b{color:var(--sv)}
+.stn.db{border-color:var(--db)} .stn.db b{color:var(--db)}
+.stn.live{transform:translateY(-5px); box-shadow:0 0 0 1px currentColor}
+.stn.live .led{background:currentColor; box-shadow:0 0 12px currentColor; animation:bl 1s ease-in-out infinite}
+.stn.done .led{background:var(--rs)}
+.stn.fail{border-color:var(--er) !important}
+.stn.fail .led{background:var(--er); box-shadow:0 0 12px var(--er); animation:none}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:.3}}
+.pkt{position:absolute; top:0; left:0; font-family:var(--fm); font-size:10px; letter-spacing:.05em;
+  padding:4px 9px; border-radius:7px; background:var(--rq); color:#1A0700; font-weight:700;
+  white-space:nowrap; opacity:0; pointer-events:none; z-index:3}
+.pkt.back{background:var(--rs); color:#131A00}
+.pkt.dead{background:var(--er); color:#fff}
+.logbox{font-family:var(--fm); font-size:12.4px; line-height:1.72; border-radius:var(--r);
+  border:1px solid var(--line); background:var(--bg2); padding:14px; min-height:140px; color:var(--tx2)}
+.logbox div{opacity:0; animation:sl .34s both}
+@keyframes sl{from{opacity:0;transform:translateX(-9px)} to{opacity:1;transform:none}}
+.t-rq{color:var(--rq)} .t-rs{color:var(--rs)} .t-sv{color:var(--sv)}
+.t-db{color:var(--db)} .t-er{color:var(--er)}
+/* database read/write pulse */
+.dbpulse{animation:pulse .9s ease-out}
+@keyframes pulse{0%{box-shadow:0 0 0 0 var(--db-s)}70%{box-shadow:0 0 0 14px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+/* ══════════════════════════════════════════════════════════════
+   10 · BUTTONS, INPUTS
+   ══════════════════════════════════════════════════════════════ */
+.btn{font:inherit; font-size:14.5px; font-weight:650; letter-spacing:-.01em; padding:11px 19px; border-radius:12px;
+  cursor:pointer; display:inline-flex; align-items:center; gap:9px; background:var(--glass2);
+  border:1px solid var(--line2); color:var(--tx); transition:.24s}
+.btn:hover:not(:disabled){transform:translateY(-2px); border-color:var(--tx3)}
+.btn:active:not(:disabled){transform:scale(.97)}
+.btn:disabled{opacity:.34; cursor:not-allowed}
+.btn.go{background:var(--rq); color:#1A0700; border-color:var(--rq); font-weight:750}
+.btn.go:hover:not(:disabled){filter:brightness(1.08)}
+.btn.alt{background:var(--rs); color:#131A00; border-color:var(--rs); font-weight:750}
+.btn.gh{background:transparent}
+.btn.sm{padding:8px 14px; font-size:13.4px}
+.btn.on{background:var(--rq-s); border-color:var(--rq); color:var(--rq)}
+:focus-visible{outline:2px solid var(--rq); outline-offset:2px}
+.fld{font:inherit; font-size:14.5px; padding:11px 13px; border-radius:11px; border:1px solid var(--line2);
+     background:var(--bg2); color:var(--tx); width:100%}
+.fld:focus{outline:2px solid var(--rq); outline-offset:1px}
+.inp{font:inherit; font-family:var(--fm); font-size:14px; padding:9px 12px; border-radius:9px;
+     border:1px solid var(--line2); background:var(--bg2); color:var(--tx); width:170px}
+select.pick{font:inherit; font-size:13.6px; padding:8px 10px; border-radius:9px; border:1px solid var(--line2);
+  background:var(--bg2); color:var(--tx); width:100%; cursor:pointer}
+select.pick.good{border-color:var(--ok); color:var(--ok)}
+select.pick.bad{border-color:var(--er); color:var(--er)}
+.lbl{font-family:var(--fm); font-size:10px; letter-spacing:.13em; text-transform:uppercase;
+     color:var(--tx3); display:block; margin-bottom:5px}
+
+/* ══════════════════════════════════════════════════════════════
+   11 · ACCORDION / QUIZ / FLASH
+   ══════════════════════════════════════════════════════════════ */
+.acc{border:1px solid var(--line); border-radius:var(--r); background:var(--glass); overflow:hidden}
+.acc + .acc{margin-top:10px}
+.acc-h{width:100%; text-align:left; font:inherit; font-size:15.2px; font-weight:650; color:var(--tx);
+  background:transparent; border:0; cursor:pointer; padding:15px 17px; display:flex; gap:12px;
+  align-items:center; transition:background .22s}
+.acc-h:hover{background:var(--glass2)}
+.acc-h .n{font-family:var(--fm); font-size:11px; color:var(--sv); flex:none}
+.acc-h .cv{margin-left:auto; flex:none; color:var(--tx3); transition:transform .38s cubic-bezier(.2,.8,.2,1)}
+.acc.op .acc-h .cv{transform:rotate(180deg); color:var(--rq)}
+.acc-b{max-height:0; overflow:hidden; transition:max-height .44s cubic-bezier(.2,.8,.2,1)}
+.acc-b .in{padding:14px 17px 17px 44px; border-top:1px solid var(--line)}
+.acc-b .in p{margin:0 0 8px; font-size:14.4px; color:var(--tx2)}
+.acc-b .in p:last-child{margin:0}
+.hidden-ans{display:none}
+.hidden-ans.show{display:block; animation:sl .34s both}
+.qz{border:1px solid var(--line); border-radius:var(--rl); padding:19px; background:var(--glass)}
+.qz + .qz{margin-top:13px}
+.qz-h{display:flex; gap:11px; align-items:flex-start; margin-bottom:13px}
+.qz-k{font-family:var(--fm); font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--sv);
+  border:1px solid var(--sv); background:var(--sv-s); padding:4px 8px; border-radius:99px; flex:none; white-space:nowrap}
+.qz-t{font-size:15.6px; font-weight:660; letter-spacing:-.016em; line-height:1.36}
+.op{width:100%; text-align:left; font:inherit; font-size:14.4px; cursor:pointer; margin-top:9px; padding:12px 14px;
+  border-radius:11px; border:1px solid var(--line2); background:var(--glass2); color:var(--tx);
+  display:flex; gap:11px; align-items:center; transition:.22s}
+.op:hover:not(:disabled){transform:translateX(4px); border-color:var(--tx3)}
+.op .kk{font-family:var(--fm); font-size:11px; width:22px; height:22px; border-radius:6px; flex:none;
+  display:grid; place-items:center; border:1px solid var(--line2); color:var(--tx3)}
+.op.yes{border-color:var(--ok); background:var(--rs-s); color:var(--ok)}
+.op.yes .kk{border-color:var(--ok); color:var(--ok)}
+.op.no{border-color:var(--er); background:var(--er-s); color:var(--er)}
+.op.no .kk{border-color:var(--er); color:var(--er)}
+.op:disabled{cursor:default}
+.fb{margin-top:12px; padding:13px 15px; border-radius:11px; font-size:14px; line-height:1.6;
+  border:1px solid var(--line2); background:var(--glass2); color:var(--tx2); display:none}
+.fb.sh{display:block; animation:sl .34s both}
+.fb b{color:var(--tx)}
+.fb.g{border-color:var(--ok); background:var(--rs-s)}
+.fb.b{border-color:var(--er); background:var(--er-s)}
+.bank{display:flex; flex-wrap:wrap; gap:9px}
+.ch{font-family:var(--fm); font-size:12.4px; padding:9px 12px; border-radius:10px; cursor:grab;
+  border:1px dashed var(--line2); background:var(--glass2); color:var(--tx); user-select:none; transition:.22s}
+.ch:hover{border-color:var(--rq); color:var(--rq); transform:translateY(-2px)}
+.ch.sel{border-style:solid; border-color:var(--rq); background:var(--rq-s); color:var(--rq)}
+.ch.used{opacity:.26; pointer-events:none}
+.zn{border:1px dashed var(--line2); border-radius:var(--r); padding:13px; min-height:84px;
+    background:var(--glass); transition:.22s}
+.zn.over{border-color:var(--rq); background:var(--rq-s)}
+.zn b{font-family:var(--fm); font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
+      color:var(--tx3); display:block; margin-bottom:9px}
+.zn.zq b{color:var(--rq)} .zn.zs b{color:var(--rs)}
+.zn-i{display:flex; flex-wrap:wrap; gap:7px; min-height:26px}
+.dr{font-family:var(--fm); font-size:12px; padding:6px 10px; border-radius:8px; background:var(--glass2);
+    border:1px solid var(--line2)}
+.dr.y{border-color:var(--ok); color:var(--ok)} .dr.n{border-color:var(--er); color:var(--er)}
+
+/* ══════════════════════════════════════════════════════════════
+   12 · MIND MAP, CHEAT SHEET, COMPLETION
+   ══════════════════════════════════════════════════════════════ */
+.mapw{overflow-x:auto; overflow-y:hidden; margin:0 -4px; padding:0 4px}
+.mm{width:100%; min-width:660px; height:auto; display:block}
+.mm text{font-family:var(--fs)}
+.mm .l1{font-size:12.5px; font-weight:700} .mm .l2{font-size:10px; font-family:var(--fm)}
+.mm .nd{cursor:pointer; transition:.3s cubic-bezier(.2,.8,.2,1)}
+.mm .nd:hover{transform:translateY(-3px)}
+.mm .nd.dim{opacity:.28}
+.mm .eg{stroke:var(--line2); stroke-width:1.2; fill:none; transition:.3s}
+.mm .eg.hot{stroke:var(--rq); stroke-width:2.2}
+.mapinfo{border:1px solid var(--line); border-radius:var(--r); padding:15px 17px; background:var(--glass2); margin-top:14px}
+.mapinfo b{display:block; font-size:15.2px; letter-spacing:-.015em; margin-bottom:4px}
+.mapinfo p{margin:0; font-size:14.2px; color:var(--tx2)}
+.cheat{font-family:var(--fm); font-size:13px; border-radius:var(--r); border:1px solid var(--line);
+       background:var(--bg2); overflow:hidden}
+.cheat .r{display:grid; grid-template-columns:150px 1fr; border-bottom:1px solid var(--line)}
+.cheat .r:last-child{border-bottom:0}
+.cheat .r:hover{background:var(--glass2)}
+.cheat .r span{padding:11px 14px; color:var(--rq); border-right:1px solid var(--line); letter-spacing:.03em}
+.cheat .r p{margin:0; padding:11px 14px; color:var(--tx2); font-family:var(--fs); font-size:13.6px}
+.done{text-align:center; padding:44px 24px; position:relative; overflow:hidden}
+.tick{width:86px;height:86px;margin:0 auto 18px;border-radius:50%;border:2px solid var(--rs);
+      display:grid;place-items:center;background:var(--rs-s)}
+.tick svg{width:44px;height:44px;stroke:var(--rs);fill:none;stroke-width:2.4;stroke-linecap:round;
+          stroke-linejoin:round;stroke-dasharray:60;stroke-dashoffset:60}
+.tick.go svg{animation:draw .7s .15s cubic-bezier(.2,.8,.2,1) forwards}
+.tick.go{animation:pp .6s cubic-bezier(.2,1.4,.4,1)}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes pp{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+.cf{position:absolute; top:-14px; width:8px; height:14px; border-radius:2px; opacity:0}
+.cf.go{animation:cfa 2.6s cubic-bezier(.25,.6,.4,1) forwards}
+@keyframes cfa{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(430px) rotate(640deg)}}
+
+/* ══════════════════════════════════════════════════════════════
+   13 · HERO
+   ══════════════════════════════════════════════════════════════ */
+.hero{padding:34px 0 8px}
+.hero h1 .q{color:var(--rq)} .hero h1 .s{color:var(--rs)}
+.hero h1 .vs{font-family:var(--fq); font-style:italic; font-weight:400; color:var(--tx3)}
+.hero h1 .w{display:inline-block; opacity:0; transform:translateY(28px);
+            animation:wd .8s cubic-bezier(.2,.8,.2,1) both}
+@keyframes wd{to{opacity:1; transform:none}}
+.meta{display:flex; gap:24px; flex-wrap:wrap; margin-top:26px}
+.meta div b{display:block; font-size:20px; font-weight:800; letter-spacing:-.03em}
+.meta div span{font-family:var(--fm); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--tx3)}
+.obj{display:flex; gap:11px; align-items:flex-start; font-size:14.6px; color:var(--tx2)}
+.obj svg{width:19px;height:19px;stroke:var(--rs);fill:none;stroke-width:2;flex:none;margin-top:3px}
+
+/* ══════════════════════════════════════════════════════════════
+   14 · RESPONSIVE
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width:1000px){
+  .shell{grid-template-columns:1fr}
+  .side{position:fixed; top:var(--top); left:0; bottom:0; width:274px; z-index:65; background:var(--bg2);
+        transform:translateX(-103%); transition:transform .34s cubic-bezier(.2,.8,.2,1)}
+  .side.open{transform:none}
+  .burger{display:flex}
+  .main{padding:0 18px 110px}
+}
+@media (max-width:680px){
+  body{font-size:15.8px}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .pad{padding:17px}
+  .cheat .r{grid-template-columns:1fr}
+  .cheat .r span{border-right:0; border-bottom:1px solid var(--line)}
+  .turn{max-width:95%}
+  .meta{gap:16px}
+  pre.raw{font-size:11.6px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{animation-duration:.001s !important; animation-iteration-count:1 !important; transition-duration:.01s !important}
+  .rv{opacity:1 !important; transform:none !important}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ SVG SPRITE — the only images in this file ══════════ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<marker id="mk" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="var(--tx3)" stroke-width="1.4" stroke-linecap="round"/></marker>
+<marker id="mkr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="var(--rs)" stroke-width="1.4" stroke-linecap="round"/></marker>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M21.4 2.6L2.8 10.2l7 2.6 2.6 7z"/><path d="M21.4 2.6L9.8 12.8"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M2.8 12.6h5l1.4 2.6h5.6l1.4-2.6h5"/><path d="M2.8 12.6L5.6 4.6h12.8l2.8 8v6a2 2 0 0 1-2 2H4.8a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect x="2.6" y="4.8" width="18.8" height="14.4" rx="2.4"/><path d="M3.4 6.4L12 13l8.6-6.6"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.6 20c0-4 3.3-6.2 7.4-6.2S19.4 16 19.4 20"/></symbol>
+<symbol id="i-browser" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.4"/><path d="M3 9h18"/><circle cx="6.2" cy="6.5" r=".7" fill="currentColor" stroke="none"/><circle cx="8.6" cy="6.5" r=".7" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2" width="11" height="20" rx="2.8"/><path d="M10.6 18.8h2.8"/></symbol>
+<symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6.4" rx="1.6"/><rect x="3" y="13.6" width="18" height="6.4" rx="1.6"/><path d="M6.4 7.2h.01M6.4 16.8h.01"/></symbol>
+<symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="5.2" rx="8" ry="3.1"/><path d="M4 5.2v13.6c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1V5.2"/><path d="M4 12c0 1.7 3.6 3.1 8 3.1s8-1.4 8-3.1"/></symbol>
+<symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6.8 18.5h10.6a4.1 4.1 0 0 0 .4-8.2 5.7 5.7 0 0 0-10.9-1.4 3.9 3.9 0 0 0-.1 9.6z"/></symbol>
+<symbol id="i-api" viewBox="0 0 24 24"><path d="M9.5 3.5H7a2 2 0 0 0-2 2v3.6L3 12l2 2.9v3.6a2 2 0 0 0 2 2h2.5"/><path d="M14.5 3.5H17a2 2 0 0 1 2 2v3.6l2 2.9-2 2.9v3.6a2 2 0 0 1-2 2h-2.5"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M9.6 14.4a4.6 4.6 0 0 0 6.5 0l2.6-2.6a4.6 4.6 0 0 0-6.5-6.5l-1.2 1.2"/><path d="M14.4 9.6a4.6 4.6 0 0 0-6.5 0L5.3 12.2a4.6 4.6 0 0 0 6.5 6.5l1.2-1.2"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.6 2.8H21v8.4l-9.8 9.8a2 2 0 0 1-2.8 0l-5.6-5.6a2 2 0 0 1 0-2.8z"/><circle cx="17.2" cy="6.8" r="1.3"/></symbol>
+<symbol id="i-hash" viewBox="0 0 24 24"><path d="M4.6 9h14.8M4.6 15h14.8M9.6 4v16M14.4 4v16"/></symbol>
+<symbol id="i-cookie" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.2"/><circle cx="9" cy="9.4" r="1.1" fill="currentColor" stroke="none"/><circle cx="14.6" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10.4" cy="15.4" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.6" cy="15.8" r="1.1" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-json" viewBox="0 0 24 24"><path d="M8 4H6.5A1.5 1.5 0 0 0 5 5.5v4L3.2 12 5 14.5v4A1.5 1.5 0 0 0 6.5 20H8"/><path d="M16 4h1.5A1.5 1.5 0 0 1 19 5.5v4L20.8 12 19 14.5v4A1.5 1.5 0 0 1 17.5 20H16"/><circle cx="12" cy="12" r=".9" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.6" y="10.6" width="14.8" height="10.6" rx="2.2"/><path d="M8.2 10.6V7.8a3.8 3.8 0 0 1 7.6 0v2.8"/></symbol>
+<symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v2.8M12 18.6v2.8M4.4 12H1.6M22.4 12h-2.8M6.6 6.6L4.6 4.6M19.4 19.4l-2-2M6.6 17.4l-2 2M19.4 4.6l-2 2"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.4 2.4L5.6 14h5.6l-1 7.6L18 10h-5.6z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M4.4 12.6l5.2 5.2L19.8 6.4"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="M4 12h15"/><path d="M13 6l6 6-6 6"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.4l9.2 16.8H2.8z"/><path d="M12 9.4v4.4M12 17h.01"/></symbol>
+<symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9.4 18h5.2M10 21h4"/><path d="M12 2.8a6 6 0 0 0-3.6 10.8V18h7.2v-4.4A6 6 0 0 0 12 2.8z"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2.8l2.9 6 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5L2.6 9.7l6.5-.9z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.4V12l3.4 2.2"/></symbol>
+<symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13.4" r="8"/><path d="M12 9.6v3.8l2.6 1.8M9.4 2.6h5.2"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.4 12S6 5.6 12 5.6 21.6 12 21.6 12 18 18.4 12 18.4 2.4 12 2.4 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 2.8l9 4.8-9 4.8-9-4.8z"/><path d="M3 12.4l9 4.8 9-4.8"/><path d="M3 16.8l9 4.8 9-4.8"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.6" cy="10.6" r="7"/><path d="M15.8 15.8L21 21"/></symbol>
+<symbol id="i-cart" viewBox="0 0 24 24"><path d="M3 4h2.4l2.4 11h10.4l2.4-8H6.4"/><circle cx="9.4" cy="19.4" r="1.6"/><circle cx="17.4" cy="19.4" r="1.6"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.4l6 3.6-6 3.6z"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.4l-1.5-1.4C5.4 14.4 2.4 11.7 2.4 8.4a4.9 4.9 0 0 1 9.6-1.6A4.9 4.9 0 0 1 21.6 8.4c0 3.3-3 6-8.1 10.6z"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.6a8.4 8.4 0 0 1-8.6 8.2 9.6 9.6 0 0 1-3.6-.6L3.4 21l1.6-4.6A8 8 0 0 1 3.8 11.6 8.4 8.4 0 0 1 12.4 3.4 8.4 8.4 0 0 1 21 11.6z"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.6"/><path d="M8.6 6l1.4-2h4l1.4 2"/></symbol>
+<symbol id="i-car" viewBox="0 0 24 24"><path d="M3 15.4h18M5 15.4l1.8-5.4A2 2 0 0 1 8.7 8.6h6.6a2 2 0 0 1 1.9 1.4l1.8 5.4"/><rect x="3" y="15.4" width="18" height="3.6" rx="1.4"/></symbol>
+<symbol id="i-hat" viewBox="0 0 24 24"><path d="M6.4 12.4a3.9 3.9 0 1 1 1.5-7.5 4.2 4.2 0 0 1 8.2 0 3.9 3.9 0 1 1 1.5 7.5z"/><rect x="6.4" y="14.6" width="11.2" height="5.4" rx="1.4"/></symbol>
+<symbol id="i-bank" viewBox="0 0 24 24"><path d="M3 9.6L12 4l9 5.6"/><path d="M5 9.6V19M19 9.6V19M9.4 9.6V19M14.6 9.6V19M3 19h18"/></symbol>
+<symbol id="i-cross" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></symbol>
+<symbol id="i-truck" viewBox="0 0 24 24"><rect x="1.6" y="7" width="12" height="9.4" rx="1.4"/><path d="M13.6 10.4h4l3 3.4v2.6h-7z"/><circle cx="6" cy="18.6" r="1.7"/><circle cx="17" cy="18.6" r="1.7"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="4.4"/><circle cx="12" cy="12" r=".9" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.8l8 3v5.9c0 5-3.4 8.4-8 9.6-4.6-1.2-8-4.6-8-9.6V5.8z"/><path d="M8.8 11.8l2.4 2.4 4-4.4"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.4 11.4a8.4 8.4 0 1 0-2.6 6.6"/><path d="M20.4 5v6.4H14"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5.4 21V3.6M5.4 4.4h12l-2 4 2 4h-12"/></symbol>
+<symbol id="i-nowifi" viewBox="0 0 24 24"><path d="M3 3.4l18 18"/><path d="M8.6 14.4a5 5 0 0 1 6.8 0"/><path d="M5 10.8a10 10 0 0 1 13.4-.6"/><path d="M12 19.4h.01"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 20c0-3.6 2.8-5.6 6.2-5.6S15.2 16.4 15.2 20"/><path d="M16.2 5.2a3.2 3.2 0 0 1 0 6M18 14.8c2.2.6 3.4 2.4 3.4 5.2"/></symbol>
+</defs></svg>
+
+<div class="sky" aria-hidden="true"><b></b><b></b><b></b></div>
+<div class="mesh" aria-hidden="true"></div>
+
+<header class="top">
+  <button class="burger" id="burger" aria-label="Show lesson contents"><svg class="ic ic-s"><use href="#i-layers"/></svg></button>
+  <div class="tg">lesson <b>04</b> · request vs response</div>
+  <div class="rail" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="rail"><i id="railFill"></i></div>
+  <div class="pct" id="pctTxt">0%</div>
+</header>
+
+<div class="shell">
+<aside class="side" id="side">
+  <div class="ring">
+    <svg viewBox="0 0 40 40" aria-hidden="true">
+      <circle class="bg" cx="20" cy="20" r="16" fill="none" stroke-width="3"/>
+      <circle class="fg" id="arc" cx="20" cy="20" r="16" fill="none" stroke-width="3" stroke-linecap="round"
+              stroke-dasharray="100.5" stroke-dashoffset="100.5"/>
+    </svg>
+    <div><b id="ringPct">0% read</b><span>lesson 4 of the course</span></div>
+  </div>
+  <nav class="nav" id="nav">
+    <a href="#s1"><em>01</em><span>Introduction</span></a>
+    <a href="#s2"><em>02</em><span>Quick revision</span></a>
+    <a href="#s3"><em>03</em><span>What is a request?</span></a>
+    <a href="#s4"><em>04</em><span>What is a response?</span></a>
+    <a href="#s5"><em>05</em><span>Why we need both</span></a>
+    <a href="#s6"><em>06</em><span>The full lifecycle</span></a>
+    <a href="#s7"><em>07</em><span>Inside a request</span></a>
+    <a href="#s8"><em>08</em><span>Inside a response</span></a>
+    <a href="#s9"><em>09</em><span>Real-world analogies</span></a>
+    <a href="#s10"><em>10</em><span>Real companies</span></a>
+    <a href="#s11"><em>11</em><span>Simulations</span></a>
+    <a href="#s12"><em>12</em><span>Beginner mistakes</span></a>
+    <a href="#s13"><em>13</em><span>Advantages</span></a>
+    <a href="#s14"><em>14</em><span>Limitations</span></a>
+    <a href="#s15"><em>15</em><span>Interview questions</span></a>
+    <a href="#s16"><em>16</em><span>Quiz</span></a>
+    <a href="#s17"><em>17</em><span>Practice questions</span></a>
+    <a href="#s18"><em>18</em><span>Mini assignment</span></a>
+    <a href="#s19"><em>19</em><span>Cheat sheet</span></a>
+    <a href="#s20"><em>20</em><span>Mind map</span></a>
+    <a href="#s21"><em>21</em><span>Summary</span></a>
+    <a href="#s22"><em>22</em><span>Lesson complete</span></a>
+  </nav>
+</aside>
+
+<main class="main">
+
+<!-- ══════════════════════ 01 · HERO ══════════════════════ -->
+<section class="sec hero" id="s1">
+  <p class="eb rv"><i>01</i><span>start here</span></p>
+  <h1>
+    <span class="w" style="animation-delay:.05s"><span class="q">Request</span></span>
+    <span class="w vs" style="animation-delay:.18s">vs</span>
+    <span class="w" style="animation-delay:.31s"><span class="s">Response</span></span>
+  </h1>
+  <p class="lede rv d1">Two messages. One goes out, one comes back. Every single thing that has ever appeared on a screen because of the internet arrived as one of these — and by the end of this lesson you will be able to read both of them line by line, including the part that tells you when something went wrong.</p>
+
+  <div class="meta rv d2">
+    <div><b>30–40 min</b><span>estimated time</span></div>
+    <div><b>Beginner</b><span>difficulty</span></div>
+    <div><b>Lessons 1–3</b><span>assumed complete</span></div>
+    <div><b>22</b><span>sections</span></div>
+  </div>
+
+  <div class="pane pad blk rv d3">
+    <p class="eb" style="margin-bottom:15px"><i>obj</i><span>by the end you will be able to</span></p>
+    <div class="grid g2">
+      <div class="obj"><svg><use href="#i-check"/></svg><span>Define a request and a response, and say who creates each one.</span></div>
+      <div class="obj"><svg><use href="#i-check"/></svg><span>Read a raw request and name every part of it: URL, method, headers, body, query, cookies.</span></div>
+      <div class="obj"><svg><use href="#i-check"/></svg><span>Read a raw response and explain what its status code is telling you.</span></div>
+      <div class="obj"><svg><use href="#i-check"/></svg><span>Trace all ten stages of one round trip without looking at notes.</span></div>
+      <div class="obj"><svg><use href="#i-check"/></svg><span>Explain why a response arriving is not the same thing as a response succeeding.</span></div>
+      <div class="obj"><svg><use href="#i-check"/></svg><span>Describe what happens when a response is slow, fails, or never arrives at all.</span></div>
+    </div>
+  </div>
+
+  <div class="row blk rv d4">
+    <a class="btn go" href="#s2">Begin lesson <svg class="ic ic-s"><use href="#i-right"/></svg></a>
+    <span class="xs">Vermilion is always the request. Citron is always the response.</span>
+  </div>
+</section>
+
+<!-- ══════════════════════ 02 · QUICK REVISION ══════════════════════ -->
+<section class="sec" id="s2">
+  <p class="eb rv"><i>02</i><span>two minutes, then onward</span></p>
+  <h2 class="rv">Quick revision</h2>
+  <p class="lede rv d1">Four words you already own. A reminder only — no new teaching here.</p>
+
+  <div class="grid g4 blk rv d1">
+    <div class="pane pad hov">
+      <div class="cb rq"><svg class="ic"><use href="#i-browser"/></svg></div>
+      <h4 style="margin-top:12px">Frontend</h4>
+      <p class="sm">The half on your device. Draws the screen and collects what you type.</p>
+      <span class="tp" style="margin-top:9px">lesson 1 &amp; 2</span>
+    </div>
+    <div class="pane pad hov">
+      <div class="cb sv"><svg class="ic"><use href="#i-cog"/></svg></div>
+      <h4 style="margin-top:12px">Backend</h4>
+      <p class="sm">The half far away. Holds the rules, checks who you are, and answers.</p>
+      <span class="tp" style="margin-top:9px">lesson 1 &amp; 2</span>
+    </div>
+    <div class="pane pad hov">
+      <div class="cb rq"><svg class="ic"><use href="#i-phone"/></svg></div>
+      <h4 style="margin-top:12px">Client</h4>
+      <p class="sm">The program that asks. It starts every conversation, and it is never trusted.</p>
+      <span class="tp" style="margin-top:9px">lesson 3</span>
+    </div>
+    <div class="pane pad hov">
+      <div class="cb sv"><svg class="ic"><use href="#i-server"/></svg></div>
+      <h4 style="margin-top:12px">Server</h4>
+      <p class="sm">The program that waits at a port and answers. It never speaks first.</p>
+      <span class="tp" style="margin-top:9px">lesson 3</span>
+    </div>
+  </div>
+
+  <div class="note v blk rv d2">
+    <div class="cb sv"><svg class="ic"><use href="#i-bulb"/></svg></div>
+    <div><b>Where this lesson picks up</b><p>Lesson 3 told you <em>who</em> is talking: the client asks, the server answers. This lesson opens the two envelopes and reads what is actually written inside them.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 03 · WHAT IS A REQUEST ══════════════════════ -->
+<section class="sec" id="s3">
+  <p class="eb rv"><i>03</i><span>the message going out</span></p>
+  <h2 class="rv">What is a <span class="k-rq">request</span>?</h2>
+  <p class="lede rv d1">Start with the everyday meaning. To request something is to ask for it. In computing the word means exactly that, with one extra detail: the asking is written down.</p>
+
+  <div class="pane pad blk rv d1">
+    <p class="trick">A request is a short, written message that one computer sends to another to ask for something.</p>
+    <div class="grid g3 blk">
+      <div class="def"><b>It is text <span>not magic</span></b><p>A request is a few hundred characters. You could type one out by hand. Section 7 shows a real one.</p></div>
+      <div class="def"><b>It is complete <span>self-contained</span></b><p>It carries everything the server needs: what you want, who you are, and any data you are sending.</p></div>
+      <div class="def"><b>It is one-way <span>then it waits</span></b><p>Sending a request does not get you an answer. It gets you a wait.</p></div>
+    </div>
+  </div>
+
+  <div class="grid g2 blk rv d2">
+    <div class="pane pad">
+      <div class="row"><div class="cb rq"><svg class="ic"><use href="#i-send"/></svg></div><h3>Who creates it, and when?</h3></div>
+      <div class="stack blk" style="gap:10px">
+        <div class="def"><b>Created by: the client</b><p>The browser or the app writes it. Not you, and not the server. You tap; the client composes the message.</p></div>
+        <div class="def"><b>Sent when: something is needed</b><p>You tap a button, open a screen, scroll to the bottom of a list, or the app quietly refreshes in the background.</p></div>
+        <div class="def"><b>Sent to: one exact address</b><p>The client must already know where to send it. A request with nowhere to go is not a request.</p></div>
+        <div class="def"><b>Sent how often: constantly</b><p>Opening one ordinary web page can send fifty or more — one for the page, and one for every image, font and script on it.</p></div>
+      </div>
+    </div>
+    <div class="pane pad">
+      <div class="row"><div class="cb rq"><svg class="ic"><use href="#i-target"/></svg></div><h3>Why is a request needed at all?</h3></div>
+      <div class="stack blk" style="gap:10px">
+        <div class="def"><b>The server cannot guess</b><p>It serves thousands of people. It has no idea which one of them you are or what you want until you say so.</p></div>
+        <div class="def"><b>It must be written to travel</b><p>Two computers cannot share thoughts. Anything crossing a network has to be turned into characters first.</p></div>
+        <div class="def"><b>It is the only way in</b><p>A server accepts requests and nothing else. There is no side door.</p></div>
+      </div>
+      <div class="note q blk">
+        <div class="cb rq"><svg class="ic"><use href="#i-bulb"/></svg></div>
+        <div><b>Memory hook</b><p>A request is an order slip. Written down, handed over, and then you wait.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane pad blk rv d3">
+    <p class="eb" style="margin-bottom:14px"><i>▶</i><span>watch one being made</span></p>
+    <div class="grid g2" style="gap:16px">
+      <div class="duo" id="rqDuo" style="min-height:172px"><div class="hd"><span>your device</span><span>the server</span></div></div>
+      <div>
+        <div class="logbox" id="rqLog" style="min-height:172px">Press the button to send one request.</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn go sm" id="rqPlay"><svg class="ic ic-s"><use href="#i-send"/></svg> Send a request</button>
+      <span class="xs">Notice how much happens on your own device before anything leaves it.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 04 · WHAT IS A RESPONSE ══════════════════════ -->
+<section class="sec" id="s4">
+  <p class="eb rv"><i>04</i><span>the message coming back</span></p>
+  <h2 class="rv">What is a <span class="k-rs">response</span>?</h2>
+  <p class="lede rv d1">A response is the reply. Also written down, also just text — and it always arrives, even when the news is bad.</p>
+
+  <div class="pane pad blk rv d1">
+    <p class="trick">A response is the written reply a server sends back, containing an outcome and usually some data.</p>
+    <div class="grid g4 blk">
+      <div class="def"><b>Created by <span>the server</span></b><p>The server writes it after doing the work. The client never writes its own response.</p></div>
+      <div class="def"><b>Always has an outcome <span>a number</span></b><p>Every response starts with a status code saying how it went. Section 8 decodes them.</p></div>
+      <div class="def"><b>Usually has data <span>the body</span></b><p>The actual content: your feed, your profile, the search results. Sometimes there is no body at all.</p></div>
+      <div class="def"><b>Arrives on the same line <span>the way back</span></b><p>It returns down the exact connection the request opened. No new call is made.</p></div>
+    </div>
+  </div>
+
+  <div class="grid g2 blk rv d2">
+    <div class="pane pad">
+      <div class="row"><div class="cb rs"><svg class="ic"><use href="#i-inbox"/></svg></div><h3>Why does a response exist?</h3></div>
+      <div class="stack blk" style="gap:10px">
+        <div class="def"><b>To close the loop</b><p>The client is waiting and has stopped moving forward. Without a reply it waits forever.</p></div>
+        <div class="def"><b>To report the outcome</b><p>Did it work? Were you allowed? Did the server break? Only the server knows, so only the server can say.</p></div>
+        <div class="def"><b>To deliver the data</b><p>The client has no copy of anything. Whatever it draws on screen, it was handed.</p></div>
+        <div class="def"><b>To carry instructions</b><p>Responses also say things like "cache this for an hour" or "here is a cookie, send it back next time".</p></div>
+      </div>
+    </div>
+    <div class="pane pad">
+      <div class="row"><div class="cb rs"><svg class="ic"><use href="#i-browser"/></svg></div><h3>What happens once it reaches the client?</h3></div>
+      <div class="stack blk" style="gap:10px">
+        <div class="def"><b>1 · Check the outcome</b><p>The client reads the status number first. Good news and bad news take different paths from here.</p></div>
+        <div class="def"><b>2 · Unpack the body</b><p>The text is turned back into something the program can work with — a list of items, a user, a video chunk.</p></div>
+        <div class="def"><b>3 · Update what is on screen</b><p>Loading spinner off. Real content on. This is the only moment you actually notice.</p></div>
+        <div class="def"><b>4 · Store anything useful</b><p>Cookies, tokens and cached copies get kept for the next request.</p></div>
+      </div>
+      <div class="note s blk">
+        <div class="cb rs"><svg class="ic"><use href="#i-bulb"/></svg></div>
+        <div><b>Memory hook</b><p>The response is the plate arriving — with a note on the side saying how the order went.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pane pad blk rv d3">
+    <p class="eb" style="margin-bottom:14px"><i>▶</i><span>watch one arrive</span></p>
+    <div class="grid g2" style="gap:16px">
+      <div class="duo" id="rsDuo" style="min-height:172px"><div class="hd"><span>your device</span><span>the server</span></div></div>
+      <div class="logbox" id="rsLog" style="min-height:172px">Press the button to receive one response.</div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn alt sm" id="rsPlay"><svg class="ic ic-s"><use href="#i-inbox"/></svg> Receive a response</button>
+      <span class="xs">Everything before the last line is invisible to the user.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 05 · WHY WE NEED BOTH ══════════════════════ -->
+<section class="sec" id="s5">
+  <p class="eb rv"><i>05</i><span>delete one and watch</span></p>
+  <h2 class="rv">Why do we need both?</h2>
+  <p class="lede rv d1">Try running the world with one of the two messages missing. Both broken worlds fail — but they fail in completely different ways, and the difference is worth feeling.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="row between" style="margin-bottom:16px">
+      <div class="row" style="gap:8px">
+        <button class="btn sm" id="wNoRq">No requests</button>
+        <button class="btn sm" id="wNoRs">No responses</button>
+        <button class="btn sm on" id="wBoth">Both</button>
+      </div>
+      <button class="btn go sm" id="wRun"><svg class="ic ic-s"><use href="#i-bolt"/></svg> Open the app</button>
+    </div>
+
+    <div class="grid g3" style="align-items:center; gap:12px">
+      <div class="stn rq" id="bxCl" style="min-width:0; flex:none; margin:0"><div class="led"></div><b>Client</b><em id="stCl">ready</em></div>
+      <div class="stn" id="bxNet" style="min-width:0; flex:none; margin:0"><div class="led"></div><b>Network</b><em id="stNet">both directions open</em></div>
+      <div class="stn sv" id="bxSv" style="min-width:0; flex:none; margin:0"><div class="led"></div><b>Server</b><em id="stSv">listening</em></div>
+    </div>
+
+    <div class="duo blk" id="wDuo"><div class="hd"><span>client</span><span>server</span></div></div>
+    <div class="note v" style="margin-top:14px" id="wNote">
+      <div class="cb sv"><svg class="ic"><use href="#i-bulb"/></svg></div>
+      <div><b id="wTitle">Both messages allowed</b><p id="wText">Press the button to run the app in this configuration.</p></div>
+    </div>
+  </div>
+
+  <div class="grid g3 blk rv d2">
+    <div class="pane pad hov">
+      <div class="row between"><div class="cb er"><svg class="ic"><use href="#i-send"/></svg></div><span class="tp er">no requests</span></div>
+      <h4 style="margin-top:13px">Nothing ever starts</h4>
+      <p class="sm">The server sits perfectly ready and is never asked anything. Your screen shows whatever was already there and never changes again. Silence, forever.</p>
+      <p class="xs" style="margin-top:8px">A world with no questions has no answers either.</p>
+    </div>
+    <div class="pane pad hov">
+      <div class="row between"><div class="cb er"><svg class="ic"><use href="#i-inbox"/></svg></div><span class="tp er">no responses</span></div>
+      <h4 style="margin-top:13px">Everything starts and nothing finishes</h4>
+      <p class="sm">Requests fly out constantly. The client waits, and waits. Every screen is a loading spinner that never stops. This is worse than silence, because it looks like it is working.</p>
+      <p class="xs" style="margin-top:8px">This is exactly what a timeout feels like.</p>
+    </div>
+    <div class="pane pad hov" style="border-color:var(--rs)">
+      <div class="row between"><div class="cb rs"><svg class="ic"><use href="#i-check"/></svg></div><span class="tp rs">both</span></div>
+      <h4 style="margin-top:13px">A closed loop</h4>
+      <p class="sm">A question with an answer. The client can stop waiting, decide what to draw, and move on. Two messages is the minimum for anything useful to happen.</p>
+    </div>
+  </div>
+
+  <div class="note s blk rv d3">
+    <div class="cb rs"><svg class="ic"><use href="#i-target"/></svg></div>
+    <div><b>The pairing rule</b><p>Requests and responses come in pairs. One request gets exactly one response — and if the response is lost, the client cannot tell the difference between "it failed" and "it worked but the answer went missing". That single ambiguity causes more real-world bugs than almost anything else in backend work.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 06 · THE FULL LIFECYCLE ══════════════════════ -->
+<section class="sec" id="s6">
+  <p class="eb rv"><i>06</i><span>ten stages, one round trip</span></p>
+  <h2 class="rv">The complete lifecycle</h2>
+  <p class="lede rv d1">Every stage, in order, with the packet visibly travelling. Step it slowly, or press play and watch the whole trip.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="pipe">
+      <div class="route" id="lcRoute">
+        <div class="stn rq"><div class="led"></div><b>User clicks</b><em>1 · you</em></div>
+        <div class="stn rq"><div class="led"></div><b>Request built</b><em>2 · browser</em></div>
+        <div class="stn"><div class="led"></div><b>Internet</b><em>3 · travelling</em></div>
+        <div class="stn sv"><div class="led"></div><b>Server receives</b><em>4 · arrival</em></div>
+        <div class="stn sv"><div class="led"></div><b>Backend works</b><em>5 · rules</em></div>
+        <div class="stn db"><div class="led"></div><b>Database</b><em>6 · lookup</em></div>
+        <div class="stn rs"><div class="led"></div><b>Response built</b><em>7 · server</em></div>
+        <div class="stn"><div class="led"></div><b>Internet</b><em>8 · returning</em></div>
+        <div class="stn rs"><div class="led"></div><b>Browser gets it</b><em>9 · arrival</em></div>
+        <div class="stn rs"><div class="led"></div><b>Screen updates</b><em>10 · you see it</em></div>
+      </div>
+      <div class="pkt" id="lcPkt">…</div>
+    </div>
+
+    <div class="row between" style="margin:8px 0 16px">
+      <div class="row" style="gap:8px">
+        <button class="btn sm" id="lcPrev">Previous</button>
+        <button class="btn go sm" id="lcNext">Next stage <svg class="ic ic-s"><use href="#i-right"/></svg></button>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn sm gh" id="lcPlay"><svg class="ic ic-s"><use href="#i-bolt"/></svg> Play all</button>
+        <button class="btn sm gh" id="lcReset"><svg class="ic ic-s"><use href="#i-refresh"/></svg> Reset</button>
+      </div>
+    </div>
+
+    <div class="grid g2" style="gap:18px">
+      <div class="pane pad" style="background:var(--bg2); box-shadow:none">
+        <span class="tp sv" id="lcWho">stage 0</span>
+        <h4 style="margin-top:12px" id="lcTitle">Nothing has happened yet</h4>
+        <p class="sm" id="lcBody">Press "Next stage". Each stage says who is acting, what exists at that moment, and how much time has passed.</p>
+      </div>
+      <div class="logbox" id="lcPay" style="min-height:186px">&nbsp;</div>
+    </div>
+    <div class="rail blk" style="height:6px"><i id="lcBar" style="width:0"></i></div>
+  </div>
+
+  <div class="note v blk rv d2">
+    <div class="cb sv"><svg class="ic"><use href="#i-clock"/></svg></div>
+    <div><b>Notice the shape</b><p>Stages 1, 2, 9 and 10 happen on your device. Stages 4 to 7 happen on the server. Stages 3 and 8 are pure travel — and together they usually take more time than all the actual work.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 07 · INSIDE A REQUEST ══════════════════════ -->
+<section class="sec" id="s7">
+  <p class="eb rv"><i>07</i><span>open the envelope</span></p>
+  <h2 class="rv">What does a <span class="k-rq">request</span> contain?</h2>
+  <p class="lede rv d1">This is a real request, written out exactly as it travels. Click any part name and it lights up in the message. We are naming these now, not studying them — each one gets its own lesson later.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="parts" id="rqParts" style="margin-bottom:16px">
+      <button class="part on" data-p="method">Method</button>
+      <button class="part" data-p="url">URL</button>
+      <button class="part" data-p="query">Query parameters</button>
+      <button class="part" data-p="headers">Headers</button>
+      <button class="part" data-p="cookies">Cookies</button>
+      <button class="part" data-p="body">Body</button>
+    </div>
+
+    <div class="env out">
+      <div class="env-h"><svg class="ic ic-s"><use href="#i-send"/></svg> request · going out <span>418 bytes</span></div>
+<pre class="raw" id="rqRaw"><span class="hl" data-p="method">POST</span> <span class="hl" data-p="url">/api/login</span><span class="hl" data-p="query">?next=/dashboard</span> HTTP/1.1
+<span class="hl" data-p="url">Host: shop.example.com</span>
+<span class="hl" data-p="headers">Content-Type: application/json</span>
+<span class="hl" data-p="headers">Accept: application/json</span>
+<span class="hl" data-p="cookies">Cookie: session=a91f3b2c; theme=dark</span>
+<span class="hl" data-p="headers">User-Agent: Mozilla/5.0 (iPhone; iOS 17_2)</span>
+
+<span class="hl" data-p="body">{
+  "email": "aisha@example.com",
+  "password": "••••••••"
+}</span></pre>
+    </div>
+
+    <div class="note q" style="margin-top:16px">
+      <div class="cb rq"><svg class="ic" id="rqIcon"><use href="#i-bolt"/></svg></div>
+      <div><b id="rqPName">method</b><p id="rqPText">The verb. It tells the server what kind of action you want.</p></div>
+    </div>
+    <div class="grid g2" style="margin-top:14px; gap:12px">
+      <div class="def"><b>in plain words</b><p id="rqPlain">"I want to send you something new."</p></div>
+      <div class="def"><b>if it were missing</b><p id="rqMiss">The server would not know whether you were reading or writing, and would refuse the message.</p></div>
+    </div>
+  </div>
+
+  <div class="grid g3 blk rv d2">
+    <div class="pane pad hov"><div class="cb rq"><svg class="ic"><use href="#i-bolt"/></svg></div>
+      <h4 style="margin-top:12px">The four methods you will meet first</h4>
+      <p class="sm"><code>GET</code> read something. <code>POST</code> create something. <code>PUT</code> replace something. <code>DELETE</code> remove something.</p>
+      <p class="xs" style="margin-top:8px">A GET should never change anything. That is a promise, not a suggestion.</p></div>
+    <div class="pane pad hov"><div class="cb rq"><svg class="ic"><use href="#i-link"/></svg></div>
+      <h4 style="margin-top:12px">Address versus question</h4>
+      <p class="sm">The URL says <em>which thing</em>. The query says <em>which version of it</em>. <code>/products</code> is the shelf; <code>?q=laptop&amp;page=2</code> narrows it down.</p></div>
+    <div class="pane pad hov"><div class="cb rq"><svg class="ic"><use href="#i-cookie"/></svg></div>
+      <h4 style="margin-top:12px">Why cookies ride along</h4>
+      <p class="sm">Each request arrives with no memory of the last one. The cookie is the client re-introducing itself every single time.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 08 · INSIDE A RESPONSE ══════════════════════ -->
+<section class="sec" id="s8">
+  <p class="eb rv"><i>08</i><span>open the reply</span></p>
+  <h2 class="rv">What does a <span class="k-rs">response</span> contain?</h2>
+  <p class="lede rv d1">Same idea, other direction. Notice the very first line — that is the part beginners skip, and it is the most important line in the whole message.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="parts resp" id="rsParts" style="margin-bottom:16px">
+      <button class="part on" data-p="status">Status code</button>
+      <button class="part" data-p="headers">Headers</button>
+      <button class="part" data-p="body">Body</button>
+    </div>
+
+    <div class="env in">
+      <div class="env-h"><svg class="ic ic-s"><use href="#i-inbox"/></svg> response · coming back <span>287 bytes</span></div>
+<pre class="raw" id="rsRaw">HTTP/1.1 <span class="hl" data-p="status">200 OK</span>
+<span class="hl" data-p="headers">Content-Type: application/json</span>
+<span class="hl" data-p="headers">Set-Cookie: session=a91f3b2c; HttpOnly; Secure</span>
+<span class="hl" data-p="headers">Cache-Control: no-store</span>
+<span class="hl" data-p="headers">Content-Length: 96</span>
+
+<span class="hl" data-p="body">{
+  "name": "Aisha",
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "expires_in": 3600
+}</span></pre>
+    </div>
+
+    <div class="note s" style="margin-top:16px">
+      <div class="cb rs"><svg class="ic"><use href="#i-check"/></svg></div>
+      <div><b id="rsPName">status code</b><p id="rsPText">A three-digit number saying how it went. The client reads this before it looks at anything else.</p></div>
+    </div>
+  </div>
+
+  <div class="grid g2 blk rv d2" style="gap:16px">
+    <div class="pane pad">
+      <div class="row"><div class="cb rs"><svg class="ic"><use href="#i-json"/></svg></div><h3>JSON preview</h3></div>
+      <p class="sm blk">The body arrives as plain text. The client turns it into structured data it can actually use. Same information, two forms.</p>
+      <div class="env in" style="margin-top:13px">
+        <div class="env-h">parsed by the client <span>3 fields</span></div>
+<pre class="raw">name        "Aisha"           text
+token       "eyJhbGciOiJ..."   text
+expires_in  3600               number</pre>
+      </div>
+      <p class="xs" style="margin-top:11px">JSON is just an agreed way of writing data as text so both sides read it the same way. Curly braces hold pairs; a name, a colon, a value.</p>
+    </div>
+    <div class="pane pad">
+      <div class="row"><div class="cb sv"><svg class="ic"><use href="#i-hash"/></svg></div><h3>Status code explorer</h3></div>
+      <p class="sm blk">Click any code. The first digit is the family, and the family alone tells you who has the problem.</p>
+      <div class="codes blk" id="codes">
+        <button class="code f2 on" data-c="200">200</button>
+        <button class="code f2" data-c="201">201</button>
+        <button class="code f2" data-c="204">204</button>
+        <button class="code f3" data-c="301">301</button>
+        <button class="code f3" data-c="304">304</button>
+        <button class="code f4" data-c="400">400</button>
+        <button class="code f4" data-c="401">401</button>
+        <button class="code f4" data-c="403">403</button>
+        <button class="code f4" data-c="404">404</button>
+        <button class="code f4" data-c="429">429</button>
+        <button class="code f5" data-c="500">500</button>
+        <button class="code f5" data-c="503">503</button>
+      </div>
+      <div class="note v blk" id="codeNote">
+        <div class="cb sv"><svg class="ic"><use href="#i-check"/></svg></div>
+        <div><b id="codeName">200 OK</b><p id="codeText">It worked. Whatever you asked for is in the body.</p></div>
+      </div>
+      <div class="grid g4 blk" style="gap:9px">
+        <div class="def" style="text-align:center"><b class="k-rs">2xx</b><p>it worked</p></div>
+        <div class="def" style="text-align:center"><b class="k-db">3xx</b><p>look elsewhere</p></div>
+        <div class="def" style="text-align:center"><b class="k-rq">4xx</b><p>your mistake</p></div>
+        <div class="def" style="text-align:center"><b class="k-er">5xx</b><p>server's mistake</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note e blk rv d3">
+    <div class="cb er"><svg class="ic"><use href="#i-warn"/></svg></div>
+    <div><b>The line that trips everyone up</b><p>A <code>404</code> is a perfectly successful response. The message travelled, arrived and was read — it simply says the thing you asked for is not there. "The response arrived" and "the request succeeded" are two completely different statements.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 09 · REAL-WORLD ANALOGIES ══════════════════════ -->
+<section class="sec" id="s9">
+  <p class="eb rv"><i>09</i><span>four places you already know</span></p>
+  <h2 class="rv">Real-world analogies</h2>
+  <p class="lede rv d1">In each one, find the moment of asking and the moment of receiving. Pick a tab — it animates and the mapping appears.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="row" id="anPick" style="gap:8px; margin-bottom:18px">
+      <button class="btn sm on" data-an="0"><svg class="ic ic-s"><use href="#i-hat"/></svg> Restaurant</button>
+      <button class="btn sm" data-an="1"><svg class="ic ic-s"><use href="#i-cross"/></svg> Hospital</button>
+      <button class="btn sm" data-an="2"><svg class="ic ic-s"><use href="#i-truck"/></svg> Courier</button>
+      <button class="btn sm" data-an="3"><svg class="ic ic-s"><use href="#i-bank"/></svg> Bank</button>
+    </div>
+
+    <div class="pipe">
+      <div class="route" id="anRoute"></div>
+      <div class="pkt" id="anPkt">…</div>
+    </div>
+
+    <div class="row between" style="margin:8px 0 14px">
+      <h4 id="anTitle">The restaurant</h4>
+      <button class="btn go sm" id="anRun"><svg class="ic ic-s"><use href="#i-bolt"/></svg> Play</button>
+    </div>
+
+    <div class="grid g2" style="gap:16px">
+      <div class="stack" style="gap:9px" id="anMap"></div>
+      <div>
+        <div class="duo" id="anDuo" style="min-height:150px"></div>
+        <div class="grid g2" style="margin-top:12px; gap:10px">
+          <div class="def"><b class="k-rq">the request</b><p id="anRq">Your order, spoken to the waiter.</p></div>
+          <div class="def"><b class="k-rs">the response</b><p id="anRs">The plate arriving at your table.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note s blk rv d2">
+    <div class="cb rs"><svg class="ic"><use href="#i-target"/></svg></div>
+    <div><b>What all four share</b><p>A clear moment of asking, an invisible middle where work happens, and a clear moment of receiving. And in all four, the answer can legitimately be "no" — the kitchen is out of it, the balance is too low. A refusal is still an answer.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 10 · REAL COMPANY EXAMPLES ══════════════════════ -->
+<section class="sec" id="s10">
+  <p class="eb rv"><i>10</i><span>six products, one shape</span></p>
+  <h2 class="rv">Real company examples</h2>
+  <p class="lede rv d1">For each one: the request that leaves, the work the server does, the database step, and the response that comes home.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="row" id="coPick" style="gap:8px; margin-bottom:18px">
+      <button class="btn sm on" data-co="0"><svg class="ic ic-s"><use href="#i-search"/></svg> Google Search</button>
+      <button class="btn sm" data-co="1"><svg class="ic ic-s"><use href="#i-cart"/></svg> Amazon search</button>
+      <button class="btn sm" data-co="2"><svg class="ic ic-s"><use href="#i-play"/></svg> Netflix play</button>
+      <button class="btn sm" data-co="3"><svg class="ic ic-s"><use href="#i-car"/></svg> Uber booking</button>
+      <button class="btn sm" data-co="4"><svg class="ic ic-s"><use href="#i-heart"/></svg> Instagram like</button>
+      <button class="btn sm" data-co="5"><svg class="ic ic-s"><use href="#i-chat"/></svg> WhatsApp send</button>
+    </div>
+
+    <div class="grid g4" style="gap:12px; margin-bottom:16px">
+      <div class="def"><b class="k-rq">1 · request</b><p id="coRq">GET /search?q=…</p></div>
+      <div class="def"><b class="k-sv">2 · server work</b><p id="coSv">Interpret the words</p></div>
+      <div class="def"><b class="k-db">3 · database</b><p id="coDb">Search the index</p></div>
+      <div class="def"><b class="k-rs">4 · response</b><p id="coRs">200 with ten links</p></div>
+    </div>
+
+    <div class="grid g2" style="gap:16px">
+      <div class="duo" id="coDuo" style="min-height:196px"></div>
+      <div>
+        <div class="env out">
+          <div class="env-h"><svg class="ic ic-s"><use href="#i-send"/></svg> the request<span id="coM">GET</span></div>
+<pre class="raw" id="coRaw">GET /search?q=how+to+boil+rice HTTP/1.1</pre>
+        </div>
+        <div class="env in" style="margin-top:12px">
+          <div class="env-h"><svg class="ic ic-s"><use href="#i-inbox"/></svg> the response<span id="coS">200 OK</span></div>
+<pre class="raw" id="coRawR">200 OK
+{ "results": [ 10 links ] }</pre>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn go sm" id="coRun"><svg class="ic ic-s"><use href="#i-bolt"/></svg> Play the exchange</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 11 · SIMULATIONS ══════════════════════ -->
+<section class="sec" id="s11">
+  <p class="eb rv"><i>11</i><span>four things you can run</span></p>
+  <h2 class="rv">Interactive simulations</h2>
+  <p class="lede rv d1">Pick an action, press the button, and watch the packet leave, the work happen, and the reply come back. The raw messages update to match whatever you type.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="row" id="simPick" style="gap:8px; margin-bottom:18px">
+      <button class="btn sm on" data-sm="0"><svg class="ic ic-s"><use href="#i-lock"/></svg> 1 · Log in</button>
+      <button class="btn sm" data-sm="1"><svg class="ic ic-s"><use href="#i-search"/></svg> 2 · Search a product</button>
+      <button class="btn sm" data-sm="2"><svg class="ic ic-s"><use href="#i-play"/></svg> 3 · Watch a video</button>
+      <button class="btn sm" data-sm="3"><svg class="ic ic-s"><use href="#i-cart"/></svg> 4 · Place an order</button>
+    </div>
+
+    <div class="grid g2" style="gap:16px; align-items:end; margin-bottom:16px">
+      <div>
+        <span class="lbl" id="simLbl">your email</span>
+        <input class="fld" id="simIn" value="aisha@example.com" autocomplete="off" aria-label="Simulation input">
+      </div>
+      <div class="row">
+        <button class="btn go" id="simGo"><svg class="ic ic-s"><use href="#i-send"/></svg> <span id="simBtn">Log in</span></button>
+        <button class="btn gh sm" id="simReset"><svg class="ic ic-s"><use href="#i-refresh"/></svg> Reset</button>
+      </div>
+    </div>
+
+    <div class="pipe">
+      <div class="route" id="simRoute">
+        <div class="stn rq"><div class="led"></div><b>Click</b><em>user</em></div>
+        <div class="stn rq"><div class="led"></div><b>Request</b><em>client builds</em></div>
+        <div class="stn"><div class="led"></div><b>Internet</b><em>out</em></div>
+        <div class="stn sv"><div class="led"></div><b>Server</b><em>processes</em></div>
+        <div class="stn db"><div class="led"></div><b>Database</b><em>read / write</em></div>
+        <div class="stn rs"><div class="led"></div><b>Response</b><em>server builds</em></div>
+        <div class="stn"><div class="led"></div><b>Internet</b><em>back</em></div>
+        <div class="stn rs"><div class="led"></div><b>Screen</b><em>updated</em></div>
+      </div>
+      <div class="pkt" id="simPkt">…</div>
+    </div>
+
+    <div class="grid g2" style="gap:16px">
+      <div>
+        <div class="env out"><div class="env-h"><svg class="ic ic-s"><use href="#i-send"/></svg> request<span id="simRqB">—</span></div>
+<pre class="raw" id="simRq">press the button</pre></div>
+        <div class="env in" style="margin-top:12px"><div class="env-h"><svg class="ic ic-s"><use href="#i-inbox"/></svg> response<span id="simRsB">—</span></div>
+<pre class="raw" id="simRs">waiting…</pre></div>
+      </div>
+      <div>
+        <span class="lbl">what is happening</span>
+        <div class="logbox" id="simLog" style="min-height:150px; margin-top:6px">Choose an action above and press the button.</div>
+        <span class="lbl" style="margin-top:14px">what the user finally sees</span>
+        <div class="pane pad" id="simScr" style="background:var(--bg2); box-shadow:none; min-height:96px; margin-top:6px">
+          <p class="xs">Nothing changes on screen until the response arrives. That waiting gap is the entire user experience of a slow backend.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 12 · BEGINNER MISTAKES ══════════════════════ -->
+<section class="sec" id="s12">
+  <p class="eb rv"><i>12</i><span>un-learn these now</span></p>
+  <h2 class="rv">Common beginner mistakes</h2>
+  <p class="lede rv d1">Six beliefs that feel right and cause real confusion later.</p>
+
+  <div class="stack blk rv d1">
+    <div class="pane pad">
+      <div class="row"><span class="tp er">myth 01</span><h4>"A request means the internet."</h4></div>
+      <p class="sm" style="margin-top:11px"><span class="k-er">Correction:</span> the request is the <em>message</em>. The internet is the <em>road</em> it travels on. Two different things, and you can have one without the other — a program on your laptop can send a request to another program on the same laptop, never touching the internet at all. Developers do this every day while building.</p>
+      <div class="grid g3 blk">
+        <div class="def"><b>The message</b><p>the request — text, written by the client</p></div>
+        <div class="def"><b>The road</b><p>the network — carries it, reads nothing</p></div>
+        <div class="def"><b>The destination</b><p>the server — waiting at a port</p></div>
+      </div>
+    </div>
+
+    <div class="pane pad">
+      <div class="row"><span class="tp er">myth 02</span><h4>"If a response came back, it worked."</h4></div>
+      <p class="sm" style="margin-top:11px"><span class="k-er">Correction:</span> a response arriving only proves the conversation completed. The status code says whether it succeeded. A <code>403</code> arrived perfectly and means "no". A <code>500</code> arrived perfectly and means "I broke". Beginners write code that treats every reply as good news, and then wonder why an error message appears as if it were data.</p>
+    </div>
+
+    <div class="pane pad">
+      <div class="row"><span class="tp er">myth 03</span><h4>"The request goes straight to the database."</h4></div>
+      <p class="sm" style="margin-top:11px"><span class="k-er">Correction:</span> it does not, and if it ever could, every app would be robbed within a day. The request stops at the server. The server decides whether the request is legitimate, then <em>the server</em> asks the database a question of its own — often a different question from the one you asked.</p>
+      <div class="pipe blk">
+        <div class="route">
+          <div class="stn rq"><div class="led"></div><b>Client</b><em>asks</em></div>
+          <div class="stn sv"><div class="led"></div><b>Server</b><em>checks first</em></div>
+          <div class="stn db"><div class="led"></div><b>Database</b><em>only via the server</em></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane pad">
+      <div class="row"><span class="tp er">myth 04</span><h4>"A response only contains data."</h4></div>
+      <p class="sm" style="margin-top:11px"><span class="k-er">Correction:</span> a response carries three things: an outcome, instructions, and possibly data. The instructions matter more than beginners expect — "keep a copy of this for an hour", "here is a cookie, send it back next time", "the thing you wanted has moved, go here instead". Some responses have no data at all and are still completely useful.</p>
+    </div>
+
+    <div class="pane pad">
+      <div class="row"><span class="tp er">myth 05</span><h4>"One click means one request."</h4></div>
+      <p class="sm" style="margin-top:11px"><span class="k-er">Correction:</span> opening one ordinary web page fires dozens — one for the page itself, then one each for every image, font, stylesheet and script. A single screen in an app might make five or six separate calls to different addresses. Counting round trips is one of the first real performance skills you will learn.</p>
+    </div>
+
+    <div class="pane pad">
+      <div class="row"><span class="tp er">myth 06</span><h4>"No response means the request failed."</h4></div>
+      <p class="sm" style="margin-top:11px"><span class="k-er">Correction:</span> silence tells you nothing about what happened at the other end. Your request may have arrived, been processed, and had its reply lost on the way home. This is why pressing "pay" twice can charge you twice, and why serious systems are built so that repeating a request is harmless.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 13 · ADVANTAGES ══════════════════════ -->
+<section class="sec" id="s13">
+  <p class="eb rv"><i>13</i><span>why this design won</span></p>
+  <h2 class="rv">Advantages of the request–response model</h2>
+  <p class="lede rv d1">Click any card for the consequence you would not have guessed.</p>
+  <div class="grid g3 blk rv d1" id="advBox"></div>
+</section>
+
+<!-- ══════════════════════ 14 · LIMITATIONS ══════════════════════ -->
+<section class="sec" id="s14">
+  <p class="eb rv"><i>14</i><span>when the loop breaks</span></p>
+  <h2 class="rv">Limitations: what goes wrong</h2>
+  <p class="lede rv d1">Four failure modes, and you can run each one. Watch where the packet dies and what the user is left looking at.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="row between" style="margin-bottom:16px">
+      <div class="row" id="failPick" style="gap:8px">
+        <button class="btn sm on" data-f="ok">Healthy</button>
+        <button class="btn sm" data-f="slow">Slow response</button>
+        <button class="btn sm" data-f="timeout">Timeout</button>
+        <button class="btn sm" data-f="err">Server error</button>
+        <button class="btn sm" data-f="off">Network down</button>
+      </div>
+      <button class="btn go sm" id="failRun"><svg class="ic ic-s"><use href="#i-bolt"/></svg> Send it</button>
+    </div>
+
+    <div class="pipe">
+      <div class="route" id="failRoute">
+        <div class="stn rq"><div class="led"></div><b>Client</b><em>sends</em></div>
+        <div class="stn"><div class="led"></div><b>Network</b><em>carries</em></div>
+        <div class="stn sv"><div class="led"></div><b>Server</b><em>works</em></div>
+        <div class="stn db"><div class="led"></div><b>Database</b><em>lookup</em></div>
+        <div class="stn rs"><div class="led"></div><b>Response</b><em>returns</em></div>
+      </div>
+      <div class="pkt" id="failPkt">…</div>
+    </div>
+
+    <div class="grid g2" style="gap:16px; margin-top:8px">
+      <div class="logbox" id="failLog" style="min-height:158px">Pick a failure mode and press "Send it".</div>
+      <div>
+        <div class="pane pad" style="background:var(--bg2); box-shadow:none; min-height:96px">
+          <span class="lbl">what the user sees</span>
+          <h4 style="margin-top:8px" id="failSee">Nothing yet</h4>
+          <p class="sm" id="failWhy">Each mode fails at a different point, and the user experience is different every time.</p>
+        </div>
+        <div class="row" style="margin-top:12px"><span class="tp" id="failTag">not run</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack blk rv d2">
+    <div class="note e"><div class="cb er"><svg class="ic"><use href="#i-timer"/></svg></div>
+      <div><b>Slow responses</b><p>Nothing is broken — the answer is simply late. The user stares at a spinner, decides the app is bad, and presses the button again, which sends a second request while the first is still in flight.</p></div></div>
+    <div class="note e"><div class="cb er"><svg class="ic"><use href="#i-clock"/></svg></div>
+      <div><b>Timeouts</b><p>The client refuses to wait forever, so after a set period it gives up and reports failure. Crucially, giving up does not cancel the work — the server may finish the job long after the client stopped listening.</p></div></div>
+    <div class="note e"><div class="cb er"><svg class="ic"><use href="#i-x"/></svg></div>
+      <div><b>Server failures</b><p>A <code>500</code> means the server broke while trying. The response arrived correctly; the work did not happen. Retrying might work — or might repeat whatever caused the break.</p></div></div>
+    <div class="note e"><div class="cb er"><svg class="ic"><use href="#i-nowifi"/></svg></div>
+      <div><b>Network failures</b><p>The request never leaves, or the reply never returns. From the client's side these two look identical, which is exactly why the ambiguity is dangerous.</p></div></div>
+    <div class="note e"><div class="cb er"><svg class="ic"><use href="#i-refresh"/></svg></div>
+      <div><b>The duplicate problem</b><p>Because silence is ambiguous, clients retry. A retried "create order" must not create two orders. The fix is to make repeating a request harmless — and that idea will come back in every lesson about writing data.</p></div></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 15 · INTERVIEW QUESTIONS ══════════════════════ -->
+<section class="sec" id="s15">
+  <p class="eb rv"><i>15</i><span>answer aloud, then reveal</span></p>
+  <h2 class="rv">Interview questions</h2>
+  <p class="lede rv d1">Twelve questions tagged by difficulty. Open one, answer it out loud, and only then press Reveal answer.</p>
+  <div class="row blk rv d1" id="ivFilter" style="gap:8px">
+    <button class="btn sm on" data-lv="all">All</button>
+    <button class="btn sm" data-lv="Easy">Easy</button>
+    <button class="btn sm" data-lv="Medium">Medium</button>
+    <button class="btn sm" data-lv="Hard">Hard</button>
+  </div>
+  <div class="blk rv d1" id="ivBox"></div>
+</section>
+
+<!-- ══════════════════════ 16 · QUIZ ══════════════════════ -->
+<section class="sec" id="s16">
+  <p class="eb rv"><i>16</i><span>instant scoring</span></p>
+  <h2 class="rv">Quiz</h2>
+  <p class="lede rv d1">Ten questions across four formats. Every answer explains itself.</p>
+
+  <div class="pane pad blk rv d1" style="display:flex; align-items:center; gap:16px">
+    <div class="cb rq"><svg class="ic"><use href="#i-target"/></svg></div>
+    <div style="flex:1">
+      <b id="qScore" style="font-size:17px; letter-spacing:-.02em">Score 0 / 10</b>
+      <div class="rail" style="margin-top:8px; height:6px"><i id="qFill"></i></div>
+      <p class="xs" id="qMsg" style="margin-top:6px">Nothing answered yet.</p>
+    </div>
+    <button class="btn gh sm" id="qReset"><svg class="ic ic-s"><use href="#i-refresh"/></svg> Reset</button>
+  </div>
+
+  <div class="blk rv d2" id="quizBox"></div>
+
+  <div class="qz blk rv d3" id="dndQ">
+    <div class="qz-h"><span class="qz-k">drag &amp; drop</span>
+      <span class="qz-t">Sort each item into the message it belongs to. Drag a card, or tap a card then tap a box.</span></div>
+    <div class="bank" id="dndBank" style="margin-bottom:14px">
+      <span class="ch" draggable="true" data-side="rq">Method (GET, POST)</span>
+      <span class="ch" draggable="true" data-side="rs">Status code</span>
+      <span class="ch" draggable="true" data-side="rq">Query parameters</span>
+      <span class="ch" draggable="true" data-side="rs">Set-Cookie</span>
+      <span class="ch" draggable="true" data-side="rq">The URL being asked for</span>
+      <span class="ch" draggable="true" data-side="rs">Cache-Control</span>
+      <span class="ch" draggable="true" data-side="rq">Written by the client</span>
+      <span class="ch" draggable="true" data-side="rs">Written by the server</span>
+    </div>
+    <div class="grid g2">
+      <div class="zn zq" data-zone="rq"><b>belongs to the request</b><div class="zn-i"></div></div>
+      <div class="zn zs" data-zone="rs"><b>belongs to the response</b><div class="zn-i"></div></div>
+    </div>
+    <div class="fb" id="dndFb"></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 17 · PRACTICE QUESTIONS ══════════════════════ -->
+<section class="sec" id="s17">
+  <p class="eb rv"><i>17</i><span>write these down first</span></p>
+  <h2 class="rv">Practice questions</h2>
+  <p class="lede rv d1">Nothing to click your way through. Answer, then compare.</p>
+  <div class="stack blk rv d1" id="prBox"></div>
+</section>
+
+<!-- ══════════════════════ 18 · MINI ASSIGNMENT ══════════════════════ -->
+<section class="sec" id="s18">
+  <p class="eb rv"><i>18</i><span>five real apps</span></p>
+  <h2 class="rv">Mini assignment</h2>
+  <p class="lede rv d1">For each app, choose the request, the server's job, and the response. Then check yourself — the full breakdown reveals as you go.</p>
+
+  <div class="pane pad blk rv d1" style="display:flex; align-items:center; gap:16px">
+    <div class="cb rs"><svg class="ic"><use href="#i-flag"/></svg></div>
+    <div style="flex:1">
+      <b id="maScore" style="font-size:17px; letter-spacing:-.02em">0 of 5 correct</b>
+      <div class="rail" style="margin-top:8px; height:6px"><i id="maFill"></i></div>
+      <p class="xs" style="margin-top:6px">All three dropdowns must be right for a row to count.</p>
+    </div>
+    <button class="btn go sm" id="maCheck"><svg class="ic ic-s"><use href="#i-check"/></svg> Check all</button>
+  </div>
+
+  <div class="stack blk rv d2" id="maBox"></div>
+
+  <div class="note v blk rv d3">
+    <div class="cb sv"><svg class="ic"><use href="#i-bulb"/></svg></div>
+    <div><b>The three questions to ask every time</b><p>What exactly left the device, and what did it say? What did the server have to decide or look up before it could answer? What came back, and what did the status code claim about it? Three questions, and you can take apart any feature in any app.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 19 · CHEAT SHEET ══════════════════════ -->
+<section class="sec" id="s19">
+  <p class="eb rv"><i>19</i><span>one page</span></p>
+  <h2 class="rv">Cheat sheet</h2>
+  <p class="lede rv d1">Two minutes of revision before an interview or the next lesson.</p>
+
+  <div class="cheat blk rv d1">
+    <div class="r"><span>request</span><p>A written message a client sends to ask for something. Text, self-contained, one-way.</p></div>
+    <div class="r"><span>response</span><p>The written reply a server sends back. Always carries an outcome, usually carries data.</p></div>
+    <div class="r"><span>who writes what</span><p>The client writes the request. The server writes the response. Never the other way round.</p></div>
+    <div class="r"><span>request parts</span><p>Method, URL, query parameters, headers, cookies, body.</p></div>
+    <div class="r"><span>response parts</span><p>Status code, headers, body.</p></div>
+    <div class="r"><span>method</span><p>GET read · POST create · PUT replace · DELETE remove. A GET must change nothing.</p></div>
+    <div class="r"><span>url vs query</span><p>The URL says which thing. The query narrows it down: <code>?q=laptop&amp;page=2</code>.</p></div>
+    <div class="r"><span>2xx</span><p>It worked. 200 OK, 201 Created, 204 No Content.</p></div>
+    <div class="r"><span>3xx</span><p>Look elsewhere. 301 Moved, 304 Not Modified.</p></div>
+    <div class="r"><span>4xx</span><p>Your side got it wrong. 400 bad shape, 401 not logged in, 403 not allowed, 404 not found, 429 too many.</p></div>
+    <div class="r"><span>5xx</span><p>The server's side broke. 500 crashed, 503 unavailable.</p></div>
+    <div class="r"><span>json</span><p>An agreed way of writing data as text so both sides read it identically.</p></div>
+    <div class="r"><span>the pairing rule</span><p>One request, one response. Every request is either answered, refused, or lost.</p></div>
+    <div class="r"><span>the big trap</span><p>"A response arrived" and "the request succeeded" are different statements. Read the status code.</p></div>
+    <div class="r"><span>the dangerous silence</span><p>No response tells you nothing. It may have worked and lost the reply — so retries must be harmless.</p></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 20 · INTERACTIVE MIND MAP ══════════════════════ -->
+<section class="sec" id="s20">
+  <p class="eb rv"><i>20</i><span>the whole loop</span></p>
+  <h2 class="rv">Interactive mind map</h2>
+  <p class="lede rv d1">Click any box. Its connections light up and the panel explains its role. Notice the browser and the user each appear twice in the journey — once on the way out, once on the way home.</p>
+
+  <div class="pane pad blk rv d1">
+    <div class="mapw">
+      <svg class="mm" viewBox="0 0 680 400" role="img" aria-label="Mind map of one round trip: user, browser, request, internet, server, backend, database, response, and back to the browser and user.">
+        <path class="eg" data-e="user browser" d="M128 64H144" marker-end="url(#mk)"/>
+        <path class="eg" data-e="browser request" d="M264 64H280" marker-end="url(#mk)"/>
+        <path class="eg" data-e="request internet" d="M400 64H416" marker-end="url(#mk)"/>
+        <path class="eg" data-e="internet server" d="M536 64H552" marker-end="url(#mk)"/>
+        <path class="eg" data-e="server backend" d="M616 88V172" marker-end="url(#mk)"/>
+        <path class="eg" data-e="backend database" d="M616 224V308" marker-end="url(#mk)"/>
+        <path class="eg" data-e="database response" d="M556 336H404" marker-end="url(#mk)"/>
+        <path class="eg" data-e="response browser" d="M288 336H208V92" marker-end="url(#mkr)"/>
+        <path class="eg" data-e="browser user" d="M158 88C144 116 86 116 74 92" marker-end="url(#mkr)"/>
+        <text class="l2" x="626" y="264" fill="var(--tx3)">reads / writes</text>
+        <text class="l2" x="480" y="326" fill="var(--rs)">the reply is built and sent home</text>
+        <text class="l2" x="218" y="212" fill="var(--rs)">arrives back at the browser</text>
+        <text class="l2" x="116" y="136" text-anchor="middle" fill="var(--rs)">shown to you</text>
+        <g class="nd" data-k="user"><rect x="16" y="40" width="112" height="48" rx="11" fill="var(--rq-s)" stroke="var(--rq)"/>
+          <text class="l1" x="72" y="61" text-anchor="middle" fill="var(--rq)">User</text>
+          <text class="l2" x="72" y="77" text-anchor="middle" fill="var(--tx3)">a person</text></g>
+        <g class="nd" data-k="browser"><rect x="152" y="40" width="112" height="48" rx="11" fill="var(--rq-s)" stroke="var(--rq)"/>
+          <text class="l1" x="208" y="61" text-anchor="middle" fill="var(--rq)">Browser</text>
+          <text class="l2" x="208" y="77" text-anchor="middle" fill="var(--tx3)">the client</text></g>
+        <g class="nd" data-k="request"><rect x="288" y="40" width="112" height="48" rx="11" fill="var(--rq-s)" stroke="var(--rq)"/>
+          <text class="l1" x="344" y="61" text-anchor="middle" fill="var(--rq)">Request</text>
+          <text class="l2" x="344" y="77" text-anchor="middle" fill="var(--tx3)">the message</text></g>
+        <g class="nd" data-k="internet"><rect x="424" y="40" width="112" height="48" rx="11" fill="var(--glass2)" stroke="var(--line2)"/>
+          <text class="l1" x="480" y="61" text-anchor="middle" fill="var(--tx)">Internet</text>
+          <text class="l2" x="480" y="77" text-anchor="middle" fill="var(--tx3)">the road</text></g>
+        <g class="nd" data-k="server"><rect x="560" y="40" width="112" height="48" rx="11" fill="var(--sv-s)" stroke="var(--sv)"/>
+          <text class="l1" x="616" y="61" text-anchor="middle" fill="var(--sv)">Server</text>
+          <text class="l2" x="616" y="77" text-anchor="middle" fill="var(--tx3)">receives</text></g>
+        <g class="nd" data-k="backend"><rect x="560" y="176" width="112" height="48" rx="11" fill="var(--sv-s)" stroke="var(--sv)"/>
+          <text class="l1" x="616" y="197" text-anchor="middle" fill="var(--sv)">Backend</text>
+          <text class="l2" x="616" y="213" text-anchor="middle" fill="var(--tx3)">the rules</text></g>
+        <g class="nd" data-k="database"><rect x="560" y="312" width="112" height="48" rx="11" fill="var(--db-s)" stroke="var(--db)"/>
+          <text class="l1" x="616" y="333" text-anchor="middle" fill="var(--db)">Database</text>
+          <text class="l2" x="616" y="349" text-anchor="middle" fill="var(--tx3)">stores</text></g>
+        <g class="nd" data-k="response"><rect x="288" y="312" width="112" height="48" rx="11" fill="var(--rs-s)" stroke="var(--rs)"/>
+          <text class="l1" x="344" y="333" text-anchor="middle" fill="var(--rs)">Response</text>
+          <text class="l2" x="344" y="349" text-anchor="middle" fill="var(--tx3)">the reply</text></g>
+      </svg>
+    </div>
+    <div class="mapinfo" id="mapInfo"><b>Click a box to explore</b><p>Eight parts. Five steps out, three steps home — and the browser and user are each visited twice, which is why the loop closes.</p></div>
+    <div class="row" style="margin-top:12px"><button class="btn gh sm" id="mapClear">Show everything again</button></div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 21 · SUMMARY ══════════════════════ -->
+<section class="sec" id="s21">
+  <p class="eb rv"><i>21</i><span>all of it, briefly</span></p>
+  <h2 class="rv">Summary</h2>
+
+  <div class="grid g2 blk rv d1">
+    <div class="pane pad hov"><div class="cb rq"><svg class="ic"><use href="#i-send"/></svg></div>
+      <h4 style="margin-top:12px">The request goes out</h4>
+      <p class="sm">Written by the client, as text. Carries a method, a URL, query parameters, headers, cookies and sometimes a body. Then the client waits.</p></div>
+    <div class="pane pad hov"><div class="cb rs"><svg class="ic"><use href="#i-inbox"/></svg></div>
+      <h4 style="margin-top:12px">The response comes back</h4>
+      <p class="sm">Written by the server. Always a status code, usually headers and a body. It returns down the same connection the request opened.</p></div>
+    <div class="pane pad hov"><div class="cb sv"><svg class="ic"><use href="#i-shield"/></svg></div>
+      <h4 style="margin-top:12px">The server is the gate</h4>
+      <p class="sm">A request never reaches the database directly. It stops at the server, which decides whether the request is legitimate and then asks its own question of storage.</p></div>
+    <div class="pane pad hov"><div class="cb er"><svg class="ic"><use href="#i-hash"/></svg></div>
+      <h4 style="margin-top:12px">Read the number first</h4>
+      <p class="sm">2xx worked, 3xx look elsewhere, 4xx your mistake, 5xx the server's mistake. Arriving is not the same as succeeding.</p></div>
+    <div class="pane pad hov"><div class="cb rq"><svg class="ic"><use href="#i-layers"/></svg></div>
+      <h4 style="margin-top:12px">One click, many messages</h4>
+      <p class="sm">A single screen can fire dozens of pairs. Counting them is how you understand why something feels slow.</p></div>
+    <div class="pane pad hov"><div class="cb er"><svg class="ic"><use href="#i-timer"/></svg></div>
+      <h4 style="margin-top:12px">Silence is ambiguous</h4>
+      <p class="sm">No answer does not mean no work. The request may have succeeded and lost its reply — which is why repeating a request must be safe.</p></div>
+  </div>
+
+  <div class="pane pad blk rv d2">
+    <p class="eb" style="margin-bottom:16px"><i>♦</i><span>memory tricks</span></p>
+    <div class="grid g2" style="gap:14px">
+      <div class="def"><b>The order slip and the plate</b><p class="trick" style="font-size:16px">You write it down, hand it over, wait. Something comes back — with a note saying how it went.</p></div>
+      <div class="def"><b>Out is hot, back is bright</b><p class="trick" style="font-size:16px">Vermilion leaves, citron returns. Every diagram in this lesson obeys it.</p></div>
+      <div class="def"><b>Four families, four owners</b><p class="trick" style="font-size:16px">2 fine, 3 elsewhere, 4 yours, 5 mine. The first digit already tells you whose fault it is.</p></div>
+      <div class="def"><b>Arrived is not achieved</b><p class="trick" style="font-size:16px">A 404 is a flawless delivery of bad news. Read the number, not the fact of the envelope.</p></div>
+    </div>
+  </div>
+
+  <div class="pane pad blk rv d3">
+    <p class="eb" style="margin-bottom:14px"><i>↺</i><span>the loop, one last time</span></p>
+    <div class="pipe">
+      <div class="route" id="sumRoute">
+        <div class="stn rq"><div class="led"></div><b>Request</b><em>client writes</em></div>
+        <div class="stn"><div class="led"></div><b>Internet</b><em>carries out</em></div>
+        <div class="stn sv"><div class="led"></div><b>Server</b><em>decides</em></div>
+        <div class="stn db"><div class="led"></div><b>Database</b><em>looks up</em></div>
+        <div class="stn rs"><div class="led"></div><b>Response</b><em>server writes</em></div>
+        <div class="stn rs"><div class="led"></div><b>Screen</b><em>you see it</em></div>
+      </div>
+      <div class="pkt" id="sumPkt">request</div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn go sm" id="sumRun"><svg class="ic ic-s"><use href="#i-bolt"/></svg> Play it once more</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ 22 · LESSON COMPLETION ══════════════════════ -->
+<section class="sec" id="s22">
+  <p class="eb rv"><i>22</i><span>the end</span></p>
+  <div class="pane done blk rv d1" id="doneCard">
+    <div class="tick" id="tick"><svg viewBox="0 0 24 24"><path d="M4.4 12.6l5.2 5.2L19.8 6.4"/></svg></div>
+    <h2>Lesson 4 completed</h2>
+    <p class="lede" style="margin:12px auto 0; max-width:47ch">You can now read both messages line by line, name every part, decode a status code on sight, and explain why a missing reply is more dangerous than an error.</p>
+    <div class="row" style="justify-content:center; margin-top:22px">
+      <span class="tp rs">✔ lesson 04 · request vs response</span>
+      <span class="tp" id="quizBadge">quiz not attempted</span>
+      <span class="tp" id="maBadge">assignment not attempted</span>
+    </div>
+    <div class="row" style="justify-content:center; margin-top:20px">
+      <button class="btn go" id="celebrate"><svg class="ic ic-s"><use href="#i-star"/></svg> Mark as complete</button>
+      <a class="btn gh" href="#s1">Read it again</a>
+    </div>
+  </div>
+
+  <div class="pane pad blk rv d2" style="border-color:var(--sv)">
+    <div class="row between"><span class="tp sv">up next</span><span class="xs mono">lesson 05</span></div>
+    <h3 style="margin-top:13px">Browser</h3>
+    <p class="sm">A proper look at the program that has been quietly writing all of your requests — what it actually is, and everything it does between your click and the pixels on screen.</p>
+    <p class="xs" style="margin-top:10px">Not covered here. Finish the quiz and the assignment above first.</p>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   LESSON 4 ENGINE  ·  Request vs Response
+   1 helpers        2 reveal          3 progress + nav
+   4 drawer         5 rq/rs demos     6 need-both
+   7 lifecycle      8 request parts   9 response parts + codes
+   10 analogies     11 companies      12 simulations
+   13 advantages    14 failure modes  15 interview
+   16 quiz + dnd    17 practice       18 assignment
+   19 mind map      20 completion
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+/* ---------- 1 · HELPERS ---------- */
+var $  = function(s,r){ return (r||document).querySelector(s); };
+var $$ = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+var SLOW = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var ic = function(id,c){ return '<svg class="ic '+(c||'ic-s')+'"><use href="#'+id+'"/></svg>'; };
+function pause(ms){ return new Promise(function(r){ setTimeout(r, SLOW ? 10 : ms); }); }
+function log(box, txt, tone){
+  var d = document.createElement('div');
+  if(tone) d.className = 't-'+tone;
+  d.textContent = txt; box.appendChild(d); box.scrollTop = box.scrollHeight;
+}
+function wipe(box, keepHead){
+  if(keepHead) $$(':scope > :not(.hd)', box).forEach(function(n){ n.remove(); });
+  else box.innerHTML = '';
+}
+/* turn-taking transcript: ['c'|'r'|'s'|'d'|'x'|'n', text, subtext] */
+function duo(box, turns, delay){
+  wipe(box, true);
+  var i = 0;
+  return new Promise(function(done){
+    (function step(){
+      if(i >= turns.length){ done(); return; }
+      var t = turns[i], el = document.createElement('div');
+      el.className = 'turn ' + t[0];
+      el.innerHTML = t[1] + (t[2] ? '<em>' + t[2] + '</em>' : '');
+      box.appendChild(el); box.scrollTop = box.scrollHeight;
+      i++; setTimeout(step, SLOW ? 25 : delay);
+    })();
+  });
+}
+function movePkt(pkt, stn, kind){
+  var route = stn.parentNode, pipe = pkt.parentNode;
+  route.scrollLeft = stn.offsetLeft - route.clientWidth/2 + stn.offsetWidth/2;
+  pkt.classList.toggle('back', kind === 'back');
+  pkt.classList.toggle('dead', kind === 'dead');
+  requestAnimationFrame(function(){
+    var a = stn.getBoundingClientRect(), b = pipe.getBoundingClientRect();
+    pkt.style.transition = SLOW ? 'none' : 'left .5s cubic-bezier(.4,0,.2,1), top .34s ease';
+    pkt.style.opacity = '1';
+    pkt.style.left = (a.left - b.left + a.width/2 - pkt.offsetWidth/2) + 'px';
+    pkt.style.top  = (a.top - b.top - 26) + 'px';
+  });
+}
+/* light stations in turn; `turn` is the index where the packet flips to "back" */
+function runRoute(route, pkt, labels, delay, turn, onStep){
+  var stns = $$('.stn', route), i = 0;
+  stns.forEach(function(s){ s.classList.remove('live','done','fail'); });
+  return new Promise(function(done){
+    (function step(){
+      if(i >= stns.length){ if(pkt) pkt.style.opacity = '0'; done(); return; }
+      if(i > 0){ stns[i-1].classList.remove('live'); stns[i-1].classList.add('done'); }
+      stns[i].classList.add('live');
+      if(stns[i].classList.contains('db')) stns[i].classList.add('dbpulse');
+      if(pkt){
+        if(labels && labels[i]) pkt.textContent = labels[i];
+        movePkt(pkt, stns[i], (turn !== undefined && i >= turn) ? 'back' : 'out');
+      }
+      if(onStep) onStep(i);
+      i++; setTimeout(step, SLOW ? 30 : delay);
+    })();
+  });
+}
+
+/* ---------- 2 · SCROLL REVEAL ---------- */
+var io = new IntersectionObserver(function(es){
+  es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } });
+}, { rootMargin:'0px 0px -8% 0px', threshold:.08 });
+$$('.rv').forEach(function(el){ io.observe(el); });
+
+/* ---------- 3 · PROGRESS + NAV ---------- */
+var secs = $$('.sec'), links = $$('#nav a'), ARC = 100.5;
+function progress(){
+  var h = document.documentElement, max = h.scrollHeight - h.clientHeight;
+  var p = max > 0 ? Math.min(100, Math.max(0, h.scrollTop / max * 100)) : 0;
+  $('#railFill').style.width = p + '%';
+  $('#rail').setAttribute('aria-valuenow', Math.round(p));
+  $('#pctTxt').textContent = Math.round(p) + '%';
+  $('#ringPct').textContent = Math.round(p) + '% read';
+  $('#arc').style.strokeDashoffset = ARC - ARC * p / 100;
+  var cur = 0;
+  secs.forEach(function(s,i){ if(s.getBoundingClientRect().top <= 130) cur = i; });
+  links.forEach(function(a,i){ a.classList.toggle('on', i === cur); a.classList.toggle('seen', i < cur); });
+}
+var t = false;
+window.addEventListener('scroll', function(){
+  if(t) return; t = true;
+  requestAnimationFrame(function(){ progress(); t = false; });
+}, { passive:true });
+progress();
+$('#burger').addEventListener('click', function(){ $('#side').classList.toggle('open'); });
+links.forEach(function(a){ a.addEventListener('click', function(){ $('#side').classList.remove('open'); }); });
+
+/* ---------- 4 · REQUEST + RESPONSE DEMOS ---------- */
+$('#rqPlay').addEventListener('click', function(){
+  var b = this, box = $('#rqLog'); b.disabled = true; box.innerHTML = '';
+  duo($('#rqDuo'), [
+    ['n','you tap "show my orders"'],
+    ['c','writing a request…','still on your device'],
+    ['c','GET /api/orders','sent — now waiting'],
+    ['n','…nothing to do but wait'],
+    ['s','received','the server has it']
+  ], 780);
+  var steps = [
+    ['rq','tap detected on the orders button'],
+    ['rq','client decides which address to ask'],
+    ['rq','client writes the method and the URL'],
+    ['rq','client attaches your identity cookie'],
+    ['rq','request handed to the network — 214 bytes'],
+    ['sv','it arrives. the client can now only wait']
+  ];
+  var i = 0;
+  (function tick(){
+    if(i >= steps.length){ b.disabled = false; return; }
+    log(box, (i+1) + '. ' + steps[i][1], steps[i][0]);
+    i++; setTimeout(tick, SLOW ? 25 : 650);
+  })();
+});
+$('#rsPlay').addEventListener('click', function(){
+  var b = this, box = $('#rsLog'); b.disabled = true; box.innerHTML = '';
+  duo($('#rsDuo'), [
+    ['s','checking your identity','server side'],
+    ['d','4 orders found','database'],
+    ['s','200 OK — writing the reply'],
+    ['r','response received','back on your device'],
+    ['r','screen updated','the only part you notice']
+  ], 780);
+  var steps = [
+    ['sv','server confirms the cookie belongs to a real session'],
+    ['db','server asks storage for that user\'s orders only'],
+    ['rs','server writes: status 200, headers, then the body'],
+    ['rs','response travels home down the same connection'],
+    ['rs','client reads the status first: 200, so this is good news'],
+    ['rs','client turns the text into a list and draws four rows']
+  ];
+  var i = 0;
+  (function tick(){
+    if(i >= steps.length){ b.disabled = false; return; }
+    log(box, (i+1) + '. ' + steps[i][1], steps[i][0]);
+    i++; setTimeout(tick, SLOW ? 25 : 650);
+  })();
+});
+
+/* ---------- 5 · WHY WE NEED BOTH ---------- */
+var wm = 'both';
+var WM = {
+  norq:['No requests allowed','The server is flawless and is never asked anything. Your screen keeps showing whatever was already there. Nothing breaks and nothing happens — a world of perfect silence.'],
+  nors:['No responses allowed','Requests fly out constantly and nothing ever comes home. Every screen becomes a spinner that never stops. This is worse than silence, because it looks like it is about to work.'],
+  both:['Both messages allowed','A question and an answer. The client can stop waiting, read the outcome, and draw something. Two messages is the minimum for anything useful.']
+};
+function setWm(m){
+  wm = m;
+  $('#wNoRq').classList.toggle('on', m === 'norq');
+  $('#wNoRs').classList.toggle('on', m === 'nors');
+  $('#wBoth').classList.toggle('on', m === 'both');
+  $('#stNet').textContent = m === 'norq' ? 'outbound blocked' : m === 'nors' ? 'inbound blocked' : 'both directions open';
+  $('#bxNet').classList.toggle('fail', m !== 'both');
+  $('#wTitle').textContent = WM[m][0];
+  $('#wText').textContent = 'Press the button to run the app in this configuration.';
+  $('#wNote').className = 'note ' + (m === 'both' ? 'v' : 'e');
+  $$('#bxCl,#bxSv,#bxNet').forEach(function(s){ s.classList.remove('live','done'); });
+  wipe($('#wDuo'), true);
+}
+$('#wNoRq').addEventListener('click', function(){ setWm('norq'); });
+$('#wNoRs').addEventListener('click', function(){ setWm('nors'); });
+$('#wBoth').addEventListener('click', function(){ setWm('both'); });
+$('#wRun').addEventListener('click', function(){
+  var b = this; b.disabled = true;
+  var turns = wm === 'norq'
+    ? [['n','the app opens'],['c','I would like to ask for my feed'],['x','No request may be sent.'],
+       ['s','listening… nothing arrives','the server never learns you exist'],
+       ['x','The screen never changes.','silence, forever']]
+    : wm === 'nors'
+    ? [['c','GET /feed'],['s','received. working…'],['d','12 rows found'],['s','200 OK — sending'],
+       ['x','No response may return.'],['x','The client is still waiting.','spinner forever — this is a timeout']]
+    : [['c','GET /feed'],['s','checking your pass'],['d','12 rows'],['s','200 OK'],
+       ['r','received and drawn','the loop closed']];
+  $('#bxCl').classList.add('live');
+  if(wm !== 'norq') setTimeout(function(){ $('#bxSv').classList.add('live'); }, 900);
+  duo($('#wDuo'), turns, 720).then(function(){
+    $('#wText').textContent = WM[wm][1];
+    b.disabled = false;
+  });
+});
+setWm('both');
+
+/* ---------- 6 · FULL LIFECYCLE ---------- */
+var LC = [
+  ['stage 1 · your device','The user clicks','A finger lands on the button. The device works out what was pressed and hands the event to the client program. Nothing has left the device.',
+   ['event: click','target: button#orders','bytes sent so far: 0','','elapsed: 0 ms']],
+  ['stage 2 · your device','The client builds the request','The client picks the address, chooses the method, attaches headers and your cookie, and writes it all out as text.',
+   ['GET /api/orders HTTP/1.1','Host: shop.example.com','Cookie: session=a91f3b2c','','elapsed: about 2 ms']],
+  ['stage 3 · the network','It travels out','The text is encrypted so nobody in between can read it, then handed from wi-fi to your provider to long-distance cables.',
+   ['encrypted in transit','hops: 14','distance: 1,800 km','','elapsed: about 45 ms']],
+  ['stage 4 · the server','The server receives it','A program waiting at a port wakes up, reads the message, and checks it has the shape it expects. This is arrival, not work.',
+   ['request accepted on port 443','method: GET','path: /api/orders','','elapsed: about 48 ms']],
+  ['stage 5 · the server','The backend does the work','Now the rules run. Who is this? Are they allowed? What exactly should they be shown? This stage is why the backend exists.',
+   ['cookie -> session -> user #4471','permission: read own orders','filter: user_id = 4471','','elapsed: about 54 ms']],
+  ['stage 6 · the database','Storage is queried','The server becomes a client and asks a precise question. The database answers exactly that and forms no opinion about it.',
+   ['SELECT id, total, status FROM orders','WHERE user_id = 4471 ORDER BY id DESC','4 rows returned','','elapsed: about 61 ms']],
+  ['stage 7 · the server','The response is built','The server shapes the rows into a reply, strips anything private, picks a status code, and adds headers.',
+   ['200 OK','Content-Type: application/json','{ "orders": [ 4 items ] }','','elapsed: about 65 ms']],
+  ['stage 8 · the network','It travels back','Home down the very same connection the request opened. No new call is made and no new address is needed.',
+   ['287 bytes','same connection reused','','elapsed: about 110 ms']],
+  ['stage 9 · your device','The client receives it','The client reads the status code before anything else. 200 means the body can be trusted as data rather than an error.',
+   ['status: 200','parsing body…','4 objects recovered','','elapsed: about 114 ms']],
+  ['stage 10 · your device','The screen updates','Spinner off, four rows on. This is the only stage the user was ever aware of.',
+   ['4 rows rendered','spinner removed','','total: about 300 ms']]
+];
+var lc = 0, lcT = null;
+function paintLc(){
+  var stns = $$('#lcRoute .stn');
+  stns.forEach(function(s,i){
+    s.classList.toggle('live', i === lc-1);
+    s.classList.toggle('done', i < lc-1);
+  });
+  if(lc > 0){
+    $('#lcPkt').textContent = lc >= 7 ? 'response' : 'request';
+    movePkt($('#lcPkt'), stns[lc-1], lc >= 7 ? 'back' : 'out');
+  } else $('#lcPkt').style.opacity = '0';
+  if(lc === 0){
+    $('#lcWho').textContent = 'stage 0';
+    $('#lcTitle').textContent = 'Nothing has happened yet';
+    $('#lcBody').textContent = 'Press "Next stage". Each stage says who is acting, what exists at that moment, and how much time has passed.';
+    $('#lcPay').innerHTML = '&nbsp;';
+  } else {
+    var s = LC[lc-1];
+    $('#lcWho').textContent = s[0];
+    $('#lcTitle').textContent = s[1];
+    $('#lcBody').textContent = s[2];
+    $('#lcPay').innerHTML = s[3].map(function(x){ return '<div>' + (x || '&nbsp;') + '</div>'; }).join('');
+  }
+  $('#lcBar').style.width = lc / LC.length * 100 + '%';
+  $('#lcPrev').disabled = lc === 0;
+  $('#lcNext').disabled = lc === LC.length;
+}
+$('#lcNext').addEventListener('click', function(){ if(lc < LC.length){ lc++; paintLc(); } });
+$('#lcPrev').addEventListener('click', function(){ if(lc > 0){ lc--; paintLc(); } });
+$('#lcReset').addEventListener('click', function(){ clearInterval(lcT); lc = 0; paintLc(); });
+$('#lcPlay').addEventListener('click', function(){
+  clearInterval(lcT); lc = 0; paintLc();
+  lcT = setInterval(function(){
+    if(lc >= LC.length){ clearInterval(lcT); return; }
+    lc++; paintLc();
+  }, SLOW ? 60 : 1550);
+});
+paintLc();
+
+/* ---------- 7 · REQUEST ANATOMY ---------- */
+var RQP = {
+  method:['i-bolt','method','The verb. It tells the server what kind of action you want.',
+    '"I want to send you something new."',
+    'The server would not know whether you were reading or writing, and would reject the message.'],
+  url:['i-link','url','The address. Which server, and which thing on that server.',
+    '"Go to shop.example.com and find the login door."',
+    'The message would have nowhere to go. A request without an address is not a request.'],
+  query:['i-search','query parameters','Extra details bolted onto the address after a question mark, to narrow down or configure what you are asking for.',
+    '"…and after logging me in, send me to the dashboard."',
+    'You would only be able to ask for whole things, never filtered, sorted or paged versions of them.'],
+  headers:['i-tag','headers','Labels about the message itself: what format the body is in, what formats you can accept, what kind of device you are.',
+    '"The parcel inside is JSON, and I can read JSON back."',
+    'The server would have to guess how to read your body and how to format its reply.'],
+  cookies:['i-cookie','cookies','A small piece of text the server gave you earlier, which you hand back on every request so it knows who you are.',
+    '"Remember me? Here is the ticket you issued last time."',
+    'Every request would be from a total stranger, and you would be logged out constantly.'],
+  body:['i-json','body','The actual data you are sending. Only requests that create or change something usually carry one.',
+    '"Here are the two values you asked me for."',
+    'You could ask for things but never send anything — no logging in, no posting, no ordering.']
+};
+function pickRqPart(p){
+  $$('#rqParts .part').forEach(function(b){ b.classList.toggle('on', b.dataset.p === p); });
+  $$('#rqRaw .hl').forEach(function(h){ h.classList.toggle('on', h.dataset.p === p); });
+  var d = RQP[p];
+  $('#rqIcon').innerHTML = '<use href="#' + d[0] + '"/>';
+  $('#rqPName').textContent = d[1];
+  $('#rqPText').textContent = d[2];
+  $('#rqPlain').textContent = d[3];
+  $('#rqMiss').textContent = d[4];
+}
+$$('#rqParts .part').forEach(function(b){ b.addEventListener('click', function(){ pickRqPart(b.dataset.p); }); });
+$$('#rqRaw .hl').forEach(function(h){ h.addEventListener('click', function(){ pickRqPart(h.dataset.p); }); });
+pickRqPart('method');
+
+/* ---------- 8 · RESPONSE ANATOMY + STATUS CODES ---------- */
+var RSP = {
+  status:['status code','A three-digit number saying how it went. The client reads this before it looks at anything else — it decides whether the body is data or an error message.'],
+  headers:['headers','Labels about the reply: what format the body is in, how long it is, whether it may be cached, and any cookie the server wants you to keep and send back next time.'],
+  body:['body','The content itself, written as text. Search results, a profile, a video chunk. Some responses correctly have no body at all.']
+};
+function pickRsPart(p){
+  $$('#rsParts .part').forEach(function(b){ b.classList.toggle('on', b.dataset.p === p); });
+  $$('#rsRaw .hl').forEach(function(h){ h.classList.toggle('on', h.dataset.p === p); });
+  $('#rsPName').textContent = RSP[p][0];
+  $('#rsPText').textContent = RSP[p][1];
+}
+$$('#rsParts .part').forEach(function(b){ b.addEventListener('click', function(){ pickRsPart(b.dataset.p); }); });
+$$('#rsRaw .hl').forEach(function(h){ h.addEventListener('click', function(){ pickRsPart(h.dataset.p); }); });
+pickRsPart('status');
+
+var CODES = {
+  '200':['200 OK','It worked. Whatever you asked for is in the body. The most common response on the internet.','v'],
+  '201':['201 Created','It worked and something new now exists — an order, an account, a post. Usually the reply tells you where to find it.','v'],
+  '204':['204 No Content','It worked and there is deliberately nothing to send back. Common after deleting something.','v'],
+  '301':['301 Moved Permanently','That thing lives at a different address now. Go there instead, and remember the new address for next time.','v'],
+  '304':['304 Not Modified','Nothing has changed since you last asked, so use the copy you already have. Saves sending the whole thing again.','v'],
+  '400':['400 Bad Request','The message itself was wrong — malformed, missing a required field, the wrong shape. Your side made the mistake.','q'],
+  '401':['401 Unauthorized','We do not know who you are. You are not logged in, or your token has expired. Log in and try again.','q'],
+  '403':['403 Forbidden','We know exactly who you are, and the answer is no. Logging in again will not help — you lack permission.','q'],
+  '404':['404 Not Found','There is nothing at that address. Note that this is a completely successful response delivering bad news.','q'],
+  '429':['429 Too Many Requests','You are asking too often. Slow down and wait before trying again. Common on public APIs.','q'],
+  '500':['500 Internal Server Error','The server broke while trying. Your request was probably fine — something failed on their side.','e'],
+  '503':['503 Service Unavailable','The server is temporarily unable to answer, usually because it is overloaded or being restarted. Try again shortly.','e']
+};
+$$('#codes .code').forEach(function(b){
+  b.addEventListener('click', function(){
+    $$('#codes .code').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    var d = CODES[b.dataset.c];
+    $('#codeName').textContent = d[0];
+    $('#codeText').textContent = d[1];
+    $('#codeNote').className = 'note ' + d[2];
+  });
+});
+
+/* ---------- 9 · ANALOGIES ---------- */
+var AN = [
+  { t:'The restaurant',
+    stn:[['rq','You order','the request'],['rq','Waiter','carries it'],['sv','Kitchen','the work'],
+         ['db','Pantry','ingredients'],['rs','The plate','the response']],
+    pk:['order','order','cooking','stock','food'],
+    map:[['Speaking your order','the request — written down and handed over'],
+         ['The waiter','the client, carrying the message'],
+         ['The kitchen','the server doing the work, out of sight'],
+         ['The pantry','the database'],
+         ['The plate arriving','the response']],
+    duo:[['c','One pasta, no cheese'],['s','Order received'],['d','pasta and sauce taken from the pantry'],
+         ['s','Cooked and plated'],['r','Food arrives at your table']],
+    rq:'Your order, spoken to the waiter.', rs:'The plate arriving at your table.' },
+  { t:'The hospital',
+    stn:[['rq','You explain','the request'],['rq','Reception','collects it'],['sv','Doctor','decides'],
+         ['db','Records','your history'],['rs','Treatment','the response']],
+    pk:['symptoms','details','thinking','history','treatment'],
+    map:[['Describing your symptoms','the request'],
+         ['Reception','the client — collects and passes on'],
+         ['The doctor','the server applying years of rules'],
+         ['Your records','the database'],
+         ['The prescription','the response']],
+    duo:[['c','I have had a fever for two days'],['s','Let me check your history'],
+         ['d','records: allergic to penicillin'],['s','Prescribing something else'],
+         ['r','Treatment received']],
+    rq:'Describing your symptoms to reception.', rs:'The prescription you walk out with.' },
+  { t:'The courier',
+    stn:[['rq','Pickup request','the request'],['rq','Drop-off','handed over'],['sv','Sorting centre','routes it'],
+         ['db','Route records','addresses'],['rs','Delivery','the response']],
+    pk:['pickup','parcel','sorting','address','delivered'],
+    map:[['Booking a pickup','the request'],
+         ['The drop-off point','where the request enters'],
+         ['The sorting centre','the server deciding the route'],
+         ['Route records','the database'],
+         ['The delivery','the response']],
+    duo:[['c','Please collect this parcel'],['s','Accepted. Working out the route'],
+         ['d','route: Delhi to Nagpur to Pune'],['s','Out for delivery, Thursday'],
+         ['r','Parcel delivered']],
+    rq:'Booking the pickup.', rs:'The parcel arriving at the other end.' },
+  { t:'The bank',
+    stn:[['rq','Withdrawal slip','the request'],['rq','Counter','receives it'],['sv','Employee','verifies'],
+         ['db','Vault','the money'],['rs','Cash','the response']],
+    pk:['withdraw','slip','checking','vault','cash'],
+    map:[['The withdrawal slip','the request — written, signed, handed over'],
+         ['The counter','the client'],
+         ['The employee','the server checking identity and balance'],
+         ['The vault','the database'],
+         ['The cash','the response']],
+    duo:[['c','I would like to withdraw 5,000'],['s','Identity confirmed. Checking balance'],
+         ['d','balance: 12,400'],['s','Approved'],['r','Cash handed over']],
+    rq:'The withdrawal slip you fill in.', rs:'The cash — or a refusal, which is also an answer.' }
+];
+var an = 0, anBusy = false;
+function paintAn(){
+  var d = AN[an];
+  $$('#anPick .btn').forEach(function(b,i){ b.classList.toggle('on', i === an); });
+  $('#anTitle').textContent = d.t;
+  $('#anRq').textContent = d.rq;
+  $('#anRs').textContent = d.rs;
+  $('#anRoute').innerHTML = d.stn.map(function(s){
+    return '<div class="stn ' + s[0] + '"><div class="led"></div><b>' + s[1] + '</b><em>' + s[2] + '</em></div>';
+  }).join('');
+  $('#anMap').innerHTML = d.map.map(function(m){
+    return '<div class="def"><b>' + m[0] + '</b><p>' + m[1] + '</p></div>';
+  }).join('');
+  $('#anPkt').style.opacity = '0';
+  wipe($('#anDuo'));
+}
+function playAn(){
+  if(anBusy) return; anBusy = true; $('#anRun').disabled = true;
+  var d = AN[an];
+  duo($('#anDuo'), d.duo, 780);
+  runRoute($('#anRoute'), $('#anPkt'), d.pk, 900, 4).then(function(){
+    anBusy = false; $('#anRun').disabled = false;
+  });
+}
+$$('#anPick .btn').forEach(function(b){
+  b.addEventListener('click', function(){ if(!anBusy){ an = +b.dataset.an; paintAn(); playAn(); } });
+});
+$('#anRun').addEventListener('click', playAn);
+paintAn();
+
+/* ---------- 10 · COMPANIES ---------- */
+var CO = [
+  ['GET /search?q=…','Work out what the words probably mean','Search a pre-sorted index of the web','200 OK with ten ranked links','GET','200 OK',
+   'GET /search?q=how+to+boil+rice HTTP/1.1\nHost: www.google.com\nAccept: text/html',
+   '200 OK\nContent-Type: application/json\n\n{ "results": [ 10 links ], "took_ms": 380 }',
+   [['c','GET /search?q=how to boil rice'],['s','interpreting the words'],['d','index searched: 41 million matches'],
+    ['s','ranked. writing 200 OK'],['r','results page drawn']]],
+  ['GET /products?q=…','Check what is in stock and priced for your region','Query the product catalogue','200 OK with a page of products','GET','200 OK',
+   'GET /products?q=laptop&page=1 HTTP/1.1\nHost: www.amazon.in\nCookie: session=8b2f…',
+   '200 OK\nContent-Type: application/json\n\n{ "items": [ 24 products ], "page": 1, "total": 1893 }',
+   [['c','GET /products?q=laptop'],['s','checking region and availability'],['d','1,893 matches, 24 on page 1'],
+    ['s','200 OK with prices and stock'],['r','product grid drawn']]],
+  ['POST /playback/start','Check the plan, the region and where you paused','Read your watch position','200 OK with a stream address and a resume point','POST','200 OK',
+   'POST /playback/start HTTP/1.1\nContent-Type: application/json\n\n{ "title_id": 80100172, "profile": 2 }',
+   '200 OK\n\n{ "stream": "https://…/1080p", "resume_at": 2472, "audio": "en" }',
+   [['c','POST /playback/start'],['s','plan allows this title here'],['d','last position: 00:41:12'],
+    ['s','200 OK — stream address and resume point'],['r','playback starts from 41:12']]],
+  ['POST /rides','Find free drivers nearby and pair exactly one','Write the new ride and lock the driver','201 Created with the driver and an arrival time','POST','201 Created',
+   'POST /rides HTTP/1.1\nContent-Type: application/json\n\n{ "pickup": [28.45, 77.02], "drop": [28.49, 77.09] }',
+   '201 Created\n\n{ "ride_id": "r_88213", "driver": "Vikas", "eta_min": 4 }',
+   [['c','POST /rides pickup=here'],['s','searching nearby drivers'],['d','4 free within 2 km — locking one'],
+    ['s','201 Created — driver assigned'],['r','car appears on your map']]],
+  ['POST /media/1042/like','Check you may see the post, then record the like once','Insert the like, increment the count','200 OK with the new count','POST','200 OK',
+   'POST /media/1042/like HTTP/1.1\nAuthorization: Bearer eyJhbGci…\nContent-Length: 0',
+   '200 OK\n\n{ "liked": true, "count": 1421 }',
+   [['c','POST /media/1042/like'],['s','may this user see this post?'],['d','like recorded — not a duplicate'],
+    ['s','200 OK — count is now 1,421'],['r','heart turns red instantly']]],
+  ['POST /messages','Confirm the recipient and store the message for delivery','Write the message and mark it undelivered','201 Created with a message id and a timestamp','POST','201 Created',
+   'POST /messages HTTP/1.1\nContent-Type: application/json\n\n{ "to": "+9198…", "text": "are you coming?" }',
+   '201 Created\n\n{ "id": "m_4471", "sent_at": "19:04", "status": "queued" }',
+   [['c','POST /messages to=Ravi'],['s','recipient exists and accepts messages'],['d','stored, marked undelivered'],
+    ['s','201 Created — one grey tick'],['r','message shows as sent']]]
+];
+var co = 0;
+function paintCo(){
+  var d = CO[co];
+  $$('#coPick .btn').forEach(function(b,i){ b.classList.toggle('on', i === co); });
+  $('#coRq').textContent = d[0]; $('#coSv').textContent = d[1];
+  $('#coDb').textContent = d[2]; $('#coRs').textContent = d[3];
+  $('#coM').textContent = d[4]; $('#coS').textContent = d[5];
+  $('#coRaw').textContent = d[6]; $('#coRawR').textContent = d[7];
+  duo($('#coDuo'), d[8], 640);
+}
+$$('#coPick .btn').forEach(function(b){
+  b.addEventListener('click', function(){ co = +b.dataset.co; paintCo(); });
+});
+$('#coRun').addEventListener('click', function(){
+  var b = this; b.disabled = true;
+  duo($('#coDuo'), CO[co][8], 640).then(function(){ b.disabled = false; });
+});
+paintCo();
+
+/* ---------- 11 · FOUR SIMULATIONS ---------- */
+var SIM = [
+  { lbl:'your email', btn:'Log in', val:'aisha@example.com',
+    rq:function(v){ return 'POST /api/login HTTP/1.1\nContent-Type: application/json\n\n{\n  "email": "' + v + '",\n  "password": "••••••••"\n}'; },
+    rs:'200 OK\nSet-Cookie: session=a91f3b2c; HttpOnly\n\n{\n  "name": "Aisha",\n  "token": "eyJhbGci…",\n  "expires_in": 3600\n}',
+    mb:'POST', sb:'200 OK',
+    steps:[['rq','you press Log in'],['rq','client writes POST /api/login with your two values'],
+      ['rq','the request leaves — encrypted, 418 bytes'],['sv','server scrambles the password one way'],
+      ['db','database returns the stored scramble for that email'],['rs','they match — server writes 200 and signs a token'],
+      ['rs','response travels home, 287 bytes'],['rs','client stores the token and opens your account']],
+    screen:function(v){ return '<span class="tp rs">200 OK</span><h4 style="margin-top:10px">Welcome back, Aisha</h4>' +
+      '<p class="sm">Signed in as ' + v + '. A session cookie was stored so the next request will not need the password again.</p>'; } },
+  { lbl:'search for a product', btn:'Search', val:'Laptop',
+    rq:function(v){ return 'GET /api/products?q=' + encodeURIComponent(v) + '&page=1 HTTP/1.1\nHost: shop.example.com\nCookie: session=a91f3b2c'; },
+    rs:'200 OK\nContent-Type: application/json\nCache-Control: max-age=60\n\n{\n  "items": [ 4 products ],\n  "total": 128\n}',
+    mb:'GET', sb:'200 OK',
+    steps:[['rq','you type a search term and press the button'],['rq','client writes GET with the term as a query parameter'],
+      ['rq','the request leaves — no body, because GET only reads'],['sv','server checks the term is safe and picks a region'],
+      ['db','SELECT from products WHERE name matches, LIMIT 4'],['rs','server writes 200 with four items and a cache instruction'],
+      ['rs','response travels home'],['rs','client draws four cards where the spinner was']],
+    screen:function(v){
+      var n = [v + ' Pro 14', v + ' Air', 'Refurbished ' + v, v + ' Ultra'], p = [74990,58990,41990,129990];
+      return '<span class="tp rs">200 OK · 4 of 128</span>' + n.map(function(x,i){
+        return '<div class="def" style="margin-top:8px"><b>' + x + '</b><p>₹' + p[i].toLocaleString('en-IN') + ' · in stock</p></div>';
+      }).join(''); } },
+  { lbl:'video id to watch', btn:'Play', val:'abc123',
+    rq:function(v){ return 'POST /api/playback/start HTTP/1.1\nContent-Type: application/json\n\n{\n  "video": "' + v + '",\n  "quality": "auto"\n}'; },
+    rs:'200 OK\n\n{\n  "stream": "https://…/720p.m3u8",\n  "resume_at": 412,\n  "duration": 1840\n}',
+    mb:'POST', sb:'200 OK',
+    steps:[['rq','you press play'],['rq','client asks to start playback, offering to accept any quality'],
+      ['rq','the request leaves'],['sv','server checks your region and your plan allow this video'],
+      ['db','database returns the second you stopped watching last time'],['rs','server writes 200 with a stream address and a resume point'],
+      ['rs','response travels home'],['rs','client starts playing — and will now make one request per few seconds of video']],
+    screen:function(v){ return '<span class="tp rs">200 OK</span><h4 style="margin-top:10px">Playing "' + v + '"</h4>' +
+      '<p class="sm">Resuming at 6:52 of 30:40, at 720p. From here the client keeps requesting the next few seconds, over and over, until you stop.</p>'; } },
+  { lbl:'product to order', btn:'Place order', val:'Wireless mouse',
+    rq:function(v){ return 'POST /api/orders HTTP/1.1\nContent-Type: application/json\nIdempotency-Key: 7f1a-9c22\n\n{\n  "item": "' + v + '",\n  "qty": 1\n}'; },
+    rs:'201 Created\nLocation: /api/orders/88213\n\n{\n  "order_id": 88213,\n  "total": 1499,\n  "status": "confirmed"\n}',
+    mb:'POST', sb:'201 Created',
+    steps:[['rq','you press Place order'],['rq','client writes POST /api/orders — and adds a key so a retry cannot order twice'],
+      ['rq','the request leaves'],['sv','server ignores any price the client sent and looks up the real one'],
+      ['db','stock drops by one in a single indivisible step, and the order is written'],['rs','server writes 201 Created and where to find the new order'],
+      ['rs','response travels home'],['rs','client shows the confirmation and clears the cart']],
+    screen:function(v){ return '<span class="tp rs">201 Created</span><h4 style="margin-top:10px">Order 88213 confirmed</h4>' +
+      '<p class="sm">1 × ' + v + ' — ₹1,499. Note the status: <code>201</code>, not <code>200</code>. Something new now exists that did not exist before.</p>'; } }
+];
+var sm = 0, smBusy = false;
+function paintSim(){
+  var d = SIM[sm];
+  $$('#simPick .btn').forEach(function(b,i){ b.classList.toggle('on', i === sm); });
+  $('#simLbl').textContent = d.lbl;
+  $('#simBtn').textContent = d.btn;
+  $('#simIn').value = d.val;
+  $('#simRq').textContent = 'press the button';
+  $('#simRs').textContent = 'waiting…';
+  $('#simRqB').textContent = '—'; $('#simRsB').textContent = '—';
+  $('#simLog').innerHTML = 'Press the button to run this one.';
+  $('#simScr').innerHTML = '<p class="xs">Nothing changes on screen until the response arrives. That waiting gap is the entire user experience of a slow backend.</p>';
+  $$('#simRoute .stn').forEach(function(s){ s.classList.remove('live','done','dbpulse'); });
+  $('#simPkt').style.opacity = '0';
+}
+$$('#simPick .btn').forEach(function(b){
+  b.addEventListener('click', function(){ if(!smBusy){ sm = +b.dataset.sm; paintSim(); } });
+});
+$('#simReset').addEventListener('click', paintSim);
+$('#simGo').addEventListener('click', function(){
+  if(smBusy) return; smBusy = true;
+  var d = SIM[sm], v = ($('#simIn').value || d.val).trim(), box = $('#simLog');
+  $('#simGo').disabled = true; box.innerHTML = '';
+  $('#simRq').textContent = d.rq(v); $('#simRqB').textContent = d.mb;
+  $('#simRs').textContent = 'waiting…'; $('#simRsB').textContent = '—';
+  $('#simScr').innerHTML = '<p class="xs">waiting for the response…</p>';
+  var pks = ['click','request','out','processing','query','response','back','drawn'];
+  runRoute($('#simRoute'), $('#simPkt'), pks, 1050, 5, function(i){
+    log(box, (i+1) + '. ' + d.steps[i][1], d.steps[i][0]);
+    if(i === 5){ $('#simRs').textContent = d.rs; $('#simRsB').textContent = d.sb; }
+  }).then(function(){
+    $('#simScr').innerHTML = d.screen(v);
+    log(box, '');
+    log(box, 'one request out, one response back — loop closed', 'rs');
+    smBusy = false; $('#simGo').disabled = false;
+  });
+});
+paintSim();
+
+/* ---------- 12 · ADVANTAGES ---------- */
+var ADV = [
+  ['i-mail','It is just text','Both messages are readable characters, which is why any language can talk to any other language.',
+   'Consequence: a Python client can call a Java server written twenty years ago. Nobody has to agree on anything except the shape of the message.'],
+  ['i-layers','Each pair stands alone','Every request carries everything it needs, so the server does not have to remember you between calls.',
+   'Consequence: any of a hundred identical servers can answer your next request. This one property is what makes scaling to millions possible at all.'],
+  ['i-hash','Failures are described, not guessed','The status code tells the client exactly what happened and whose fault it was.',
+   'Consequence: a client can react intelligently — retry a 503, log out on a 401, show "not found" on a 404 — without knowing anything about the server\'s internals.'],
+  ['i-shield','One door, one guard','Every interaction arrives at the same place in the same shape, so every check can be applied in one spot.',
+   'Consequence: authentication, rate limiting and logging are added once and cover everything. A system with many entry points cannot do that.'],
+  ['i-eye','You can watch it happen','Because messages are text and self-describing, you can inspect every request and response your app makes.',
+   'Consequence: this is why debugging web systems is possible at all. Open the network tab in any browser and the entire conversation is right there.'],
+  ['i-refresh','Answers can be reused','A response can say how long it stays valid, so identical requests need not be answered twice.',
+   'Consequence: caching. Most of what loads instantly on the internet was never fetched from the server at all — it was already on your machine.']
+];
+$('#advBox').innerHTML = ADV.map(function(a,i){
+  return '<div class="pane pad hov advc" data-i="' + i + '" style="cursor:pointer">' +
+    '<div class="cb rs">' + ic(a[0],'ic') + '</div>' +
+    '<h4 style="margin-top:13px">' + a[1] + '</h4><p class="sm">' + a[2] + '</p>' +
+    '<p class="xs advh" style="margin-top:9px; color:var(--rq)">tap to see why it matters</p>' +
+    '<div class="hidden-ans"><p class="sm" style="border-top:1px solid var(--line); margin-top:11px; padding-top:11px">' +
+    a[3] + '</p></div></div>';
+}).join('');
+$$('.advc').forEach(function(c){
+  c.addEventListener('click', function(){
+    var h = $('.hidden-ans', c), open = h.classList.toggle('show');
+    $('.advh', c).textContent = open ? 'tap to hide' : 'tap to see why it matters';
+  });
+});
+
+/* ---------- 13 · FAILURE MODES ---------- */
+var FAIL = {
+  ok:   { stop:5, delay:900, tag:'200 OK', see:'The content appears',
+          why:'About 300 milliseconds from click to pixels. The user never notices any of the five stages.',
+          log:[['rq','client sends the request'],['sv','network carries it — 45 ms'],['sv','server accepts and applies the rules'],
+               ['db','database returns 4 rows'],['rs','200 OK travels home — total 300 ms']], note:'v' },
+  slow: { stop:5, delay:1700, tag:'200 OK, eventually', see:'A spinner, then the content',
+          why:'Nothing is broken. The answer is simply late, so the user stares at a spinner, decides the app is bad, and often presses the button again — sending a second request while the first is still in flight.',
+          log:[['rq','client sends the request'],['sv','network is congested — 900 ms'],['sv','server is overloaded, queueing'],
+               ['db','a slow query — 5.2 seconds'],['rs','200 OK arrives after 8.4 seconds']], note:'e' },
+  timeout:{ stop:3, at:4, delay:1100, tag:'no response', see:'An error, after a long wait',
+          why:'The client refused to wait forever and gave up. Critically, giving up did not cancel anything — the server may complete the work seconds after nobody is listening.',
+          log:[['rq','client sends the request'],['sv','network carries it fine'],['sv','server received it and started working'],
+               ['er','client waited 30 seconds and gave up'],['er','TIMEOUT — the work may still be happening']], note:'e' },
+  err:  { stop:5, at:4, delay:900, tag:'500', see:'"Something went wrong"',
+          why:'The response arrived perfectly. It says the server broke while trying. Your request was probably fine — retrying might work, or might break it again the same way.',
+          log:[['rq','client sends the request'],['sv','network carries it fine'],['sv','server starts the work'],
+               ['er','database connection refused'],['er','500 Internal Server Error travels home']], note:'e' },
+  off:  { stop:1, at:1, delay:900, tag:'never sent', see:'"No internet connection"',
+          why:'The request never left the device, so the server has no idea you tried. This is the only failure the client can be certain about — and therefore the safest one to retry.',
+          log:[['rq','client writes the request'],['er','no route to the network'],['er','the request never leaves the device'],
+               ['er','the server never learns that you tried']], note:'e' }
+};
+var fm = 'ok', fBusy = false;
+$$('#failPick .btn').forEach(function(b){
+  b.addEventListener('click', function(){
+    if(fBusy) return;
+    fm = b.dataset.f;
+    $$('#failPick .btn').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    $$('#failRoute .stn').forEach(function(s){ s.classList.remove('live','done','fail','dbpulse'); });
+    $('#failPkt').style.opacity = '0';
+    $('#failLog').innerHTML = 'Press "Send it".';
+    $('#failSee').textContent = 'Not run yet';
+    $('#failWhy').textContent = 'Each mode fails at a different point, and the user experience is different every time.';
+    $('#failTag').textContent = 'not run'; $('#failTag').className = 'tp';
+  });
+});
+$('#failRun').addEventListener('click', function(){
+  if(fBusy) return; fBusy = true;
+  var d = FAIL[fm], box = $('#failLog'), stns = $$('#failRoute .stn');
+  $('#failRun').disabled = true; box.innerHTML = '';
+  stns.forEach(function(s){ s.classList.remove('live','done','fail','dbpulse'); });
+  var i = 0;
+  (function step(){
+    if(i >= d.stop){
+      if(fm !== 'ok' && fm !== 'slow'){
+        var bad = stns[Math.min(d.at, stns.length - 1)];
+        bad.classList.add('fail');
+        $('#failPkt').textContent = 'lost';
+        movePkt($('#failPkt'), bad, 'dead');
+      } else {
+        $('#failPkt').style.opacity = '0';
+      }
+      d.log.slice(i).forEach(function(l,k){
+        setTimeout(function(){ log(box, l[1], l[0]); }, SLOW ? 10 : k * 520);
+      });
+      setTimeout(function(){
+        $('#failSee').textContent = d.see;
+        $('#failWhy').textContent = d.why;
+        $('#failTag').textContent = d.tag;
+        $('#failTag').className = 'tp ' + (fm === 'ok' ? 'rs' : 'er');
+        fBusy = false; $('#failRun').disabled = false;
+      }, SLOW ? 30 : d.log.slice(i).length * 520);
+      return;
+    }
+    if(i > 0){ stns[i-1].classList.remove('live'); stns[i-1].classList.add('done'); }
+    stns[i].classList.add('live');
+    if(stns[i].classList.contains('db')) stns[i].classList.add('dbpulse');
+    $('#failPkt').textContent = i >= 4 ? 'response' : 'request';
+    movePkt($('#failPkt'), stns[i], i >= 4 ? 'back' : 'out');
+    if(d.log[i]) log(box, d.log[i][1], d.log[i][0]);
+    i++; setTimeout(step, SLOW ? 30 : d.delay);
+  })();
+});
+
+/* ---------- 14 · INTERVIEW QUESTIONS ---------- */
+var IV = [
+  ['Easy','What is a request?',['A written message a client sends to another computer to ask for something.',
+    'It is plain text, it carries everything the server needs, and after sending it the client can only wait.']],
+  ['Easy','What is a response?',['The written reply the server sends back. It always contains a status code, usually headers, and usually a body of data.']],
+  ['Easy','Who creates the request, and who creates the response?',['The client creates the request. The server creates the response. Never the other way round.']],
+  ['Easy','Name the parts of a request.',['Method, URL, query parameters, headers, cookies, and a body when there is data to send.']],
+  ['Medium','What is a status code, and why does the client read it first?',
+   ['A three-digit number describing the outcome. The client reads it before touching the body, because it decides whether that body is useful data or an error message.',
+    '2xx worked, 3xx look elsewhere, 4xx your side got it wrong, 5xx the server broke.']],
+  ['Medium','Is a 404 a failed response?',
+   ['No — it is a completely successful response carrying bad news. The message travelled, arrived and was understood; it simply says nothing exists at that address.',
+    '"The response arrived" and "the request succeeded" are separate statements.']],
+  ['Medium','What is the difference between the URL and the query parameters?',
+   ['The URL identifies which thing you want. The query parameters narrow, filter, sort or page it.',
+    '<code>/products</code> is the shelf; <code>?q=laptop&amp;page=2</code> says which part of the shelf.']],
+  ['Medium','Why do cookies get sent on every request?',
+   ['Because each request arrives with no memory of the previous one. The cookie is the client re-introducing itself every single time.',
+    'Without it, the server would treat every request as coming from a total stranger.']],
+  ['Hard','A request times out. Did the work happen?',
+   ['You cannot tell, and that is the whole problem. The request may never have arrived, or it may have arrived, been processed successfully, and had its reply lost on the way back.',
+    'Because the client cannot distinguish these, it will often retry — which is why write operations must be built so that repeating them is harmless.']],
+  ['Hard','Why is the request–response model described as stateless, and why does that matter?',
+   ['Because every request carries everything needed to handle it, so the server does not have to remember anything about you between calls.',
+    'That is what allows any of a hundred identical servers to answer your next request. Statelessness is the property that makes horizontal scaling possible.']],
+  ['Hard','Can a request reach the database directly?',
+   ['No. It stops at the server. The server decides whether the request is legitimate and then issues its own separate query to the database — often a narrower question than the one the client asked.',
+    'If clients could query storage directly, every permission rule in the system would be optional.']],
+  ['Hard','A page loads slowly but every server responds in 20 ms. What is wrong?',
+   ['Too many round trips. Each crossing of the network costs far more than the server\'s own work, so ten sequential requests at 200 ms of travel each is two seconds of waiting with almost no computing in it.',
+    'The fix is fewer requests — combine them, or fetch them in parallel — not a faster server.']]
+];
+function renderIv(lv){
+  var items = IV.filter(function(q){ return lv === 'all' || q[0] === lv; });
+  $('#ivBox').innerHTML = items.map(function(q,i){
+    var col = q[0] === 'Easy' ? 'rs' : (q[0] === 'Medium' ? 'rq' : 'er');
+    return '<div class="acc"><button class="acc-h" aria-expanded="false">' +
+      '<span class="n">' + String(i+1).padStart(2,'0') + '</span>' +
+      '<span><span class="tp ' + col + '" style="margin-right:9px">' + q[0] + '</span>' + q[1] + '</span>' +
+      ic('i-chev','ic-s cv') + '</button><div class="acc-b"><div class="in">' +
+      '<button class="btn sm rev">' + ic('i-eye') + ' Reveal answer</button>' +
+      '<div class="hidden-ans" style="margin-top:12px">' +
+      q[2].map(function(p){ return '<p>' + p + '</p>'; }).join('') + '</div></div></div></div>';
+  }).join('');
+  wireAcc($('#ivBox'));
+  $$('#ivBox .rev').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var box = btn.nextElementSibling, panel = box.parentNode.parentNode;
+      box.classList.add('show'); btn.remove();
+      panel.style.maxHeight = panel.scrollHeight + 400 + 'px';
+    });
+  });
+}
+$$('#ivFilter .btn').forEach(function(b){
+  b.addEventListener('click', function(){
+    $$('#ivFilter .btn').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on'); renderIv(b.dataset.lv);
+  });
+});
+
+/* ---------- 15 · PRACTICE QUESTIONS ---------- */
+var PR = [
+  ['rs','Easy','In one sentence each, define request and response.',
+   'A request is a written message a client sends to ask for something. A response is the written reply the server sends back, carrying an outcome and usually data.'],
+  ['rs','Easy','Which parts of a request are always present, and which are optional?',
+   'A method and a URL are always there. Headers are effectively always there. Query parameters, cookies and a body are all optional — a simple GET often has none of the three.'],
+  ['rq','Medium','What does 401 mean, and how is it different from 403?',
+   '401 means we do not know who you are — you are not logged in, or your token expired, so logging in may fix it. 403 means we know exactly who you are and you are not allowed; logging in again will not help.'],
+  ['rq','Medium','Why must a GET request never change anything on the server?',
+   'Because everything assumes it is safe to repeat: browsers pre-fetch links, caches store the results, and users refresh freely. If a GET deleted something, simply reloading a page could destroy data.'],
+  ['er','Hard','Explain why a lost response is more dangerous than an error response.',
+   'An error tells the client what happened, so it can react correctly. A lost response tells it nothing: the work may have succeeded. The client retries and can cause the same action to happen twice — a double charge, a duplicate order.'],
+  ['er','Hard','Your app makes one request that returns 2 MB of data, and a colleague suggests splitting it into twenty requests. When is each approach better?',
+   'One large request costs a single round trip but blocks the screen until all of it arrives. Twenty small ones let the screen fill progressively and fail partially rather than totally, but pay the travel cost twenty times. On a fast connection, split; on a slow high-latency one, combine.'],
+  ['sv','Scenario','You press "pay" and the app freezes, then shows an error. You check your bank and the money is gone. Explain what happened in request-response terms.',
+   'The request reached the server and the payment was processed. The response was lost or timed out on the way back, so the client never learned it had succeeded and reported failure. The work happened; only the news of it went missing.'],
+  ['sv','Scenario','A page shows old prices even after the shop updated them. Which part of the response is responsible?',
+   'A caching header. The earlier response told the client it could reuse that copy for a period, so the client is answering from its own memory instead of asking again. The response carried an instruction, not just data.']
+];
+$('#prBox').innerHTML = PR.map(function(p,i){
+  return '<div class="acc"><button class="acc-h" aria-expanded="false">' +
+    '<span class="n">' + String(i+1).padStart(2,'0') + '</span>' +
+    '<span><span class="tp ' + p[0] + '" style="margin-right:9px">' + p[1] + '</span>' + p[2] + '</span>' +
+    ic('i-chev','ic-s cv') + '</button><div class="acc-b"><div class="in">' +
+    '<p><b style="color:var(--tx)">A good answer:</b> ' + p[3] + '</p></div></div></div>';
+}).join('');
+function wireAcc(root){
+  $$('.acc-h', root).forEach(function(btn){
+    if(btn.dataset.w) return;
+    btn.dataset.w = '1';
+    btn.addEventListener('click', function(){
+      var acc = btn.parentNode, panel = $('.acc-b', acc), open = acc.classList.toggle('op');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      panel.style.maxHeight = open ? panel.scrollHeight + 400 + 'px' : '0px';
+    });
+  });
+}
+wireAcc(document);
+renderIv('all');
+
+/* ---------- 16 · QUIZ ---------- */
+var QUIZ = [
+  { k:'multiple choice', q:'Who writes the request?',
+    o:['The server','The client','The database','The network'], a:1,
+    w:'The client writes it. The server writes the response. That direction never reverses.' },
+  { k:'true / false', q:'A response that arrives means the request succeeded.',
+    o:['True','False'], a:1,
+    w:'False. Arriving and succeeding are different. A 404 or a 500 arrives perfectly and still means it did not work — which is why the status code exists.' },
+  { k:'multiple choice', q:'Which of these belongs to a response, not a request?',
+    o:['The method','Query parameters','The status code','Cookies being sent'], a:2,
+    w:'The status code is the first line of a response. Methods, query parameters and outgoing cookies all belong to the request.' },
+  { k:'fill in the blank', blank:true,
+    q:'A ______ goes out, and a ______ comes back.', a:['request','response'],
+    w:'One out, one back. Every interaction with a server is exactly one of each.' },
+  { k:'multiple choice', q:'A 4xx status code means…',
+    o:['The server broke','Something was wrong on the asking side','It worked','Look at a different address'], a:1,
+    w:'4xx is your side: malformed, not logged in, not allowed, not found. 5xx is the server\'s side.' },
+  { k:'true / false', q:'A request can reach the database directly.',
+    o:['True','False'], a:1,
+    w:'False. It stops at the server, which decides whether it is legitimate and then asks the database its own separate question.' },
+  { k:'multiple choice', q:'You press a button and nothing comes back at all. What can you conclude?',
+    o:['The work definitely failed','The work definitely succeeded','You cannot tell whether the work happened','The server is offline'], a:2,
+    w:'Silence is ambiguous. The request may have arrived and succeeded with only the reply lost — which is exactly why retries must be built to be harmless.' },
+  { k:'fill in the blank', blank:true,
+    q:'The URL says which ______, and the query parameters ______ it down.', a:['thing','narrow'],
+    w:'The URL identifies; the query filters, sorts or pages. <code>/products</code> then <code>?q=laptop&amp;page=2</code>.' },
+  { k:'multiple choice', q:'Why does the client send a cookie on every single request?',
+    o:['To make requests smaller','Because each request has no memory of the previous one','Because the server demands it once per hour','To speed up the network'], a:1,
+    w:'Each request is independent, so the client must re-introduce itself every time. That independence is also what lets any server in a pool answer you.' }
+];
+var got = {}, TOT = QUIZ.length + 1;
+function paintScore(){
+  var ks = Object.keys(got), right = ks.filter(function(k){ return got[k]; }).length;
+  $('#qScore').textContent = 'Score ' + right + ' / ' + TOT;
+  $('#qFill').style.width = right / TOT * 100 + '%';
+  $('#qMsg').textContent = ks.length === 0 ? 'Nothing answered yet.'
+    : ks.length < TOT ? ks.length + ' of ' + TOT + ' answered.'
+    : (right === TOT ? 'All correct. You can read both messages.' : 'All answered — re-read the explanations you missed.');
+  var b = $('#quizBadge');
+  b.textContent = ks.length === 0 ? 'quiz not attempted' : 'quiz ' + right + '/' + TOT;
+  b.className = 'tp ' + (ks.length === 0 ? '' : (right >= TOT - 1 ? 'rs' : 'er'));
+}
+$('#quizBox').innerHTML = QUIZ.map(function(q,i){
+  var body = q.blank
+    ? '<div class="row" style="gap:10px; margin-top:6px">' +
+      '<input class="inp" data-b="0" placeholder="first blank" aria-label="first blank">' +
+      '<input class="inp" data-b="1" placeholder="second blank" aria-label="second blank">' +
+      '<button class="btn sm" data-chk="' + i + '">Check</button></div>'
+    : q.o.map(function(o,j){
+        return '<button class="op" data-q="' + i + '" data-o="' + j + '">' +
+          '<span class="kk">' + String.fromCharCode(65+j) + '</span><span>' + o + '</span></button>';
+      }).join('');
+  return '<div class="qz" data-qi="' + i + '"><div class="qz-h"><span class="qz-k">' + q.k + '</span>' +
+    '<span class="qz-t">' + q.q + '</span></div>' + body + '<div class="fb"></div></div>';
+}).join('');
+function feedback(i, ok){
+  var card = $('.qz[data-qi="' + i + '"]'), fb = $('.fb', card);
+  fb.className = 'fb sh ' + (ok ? 'g' : 'b');
+  fb.innerHTML = '<b>' + (ok ? 'Correct.' : 'Not quite.') + '</b> ' + QUIZ[i].w;
+  got[i] = ok; paintScore();
+}
+$$('#quizBox .op').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var i = +btn.dataset.q, j = +btn.dataset.o;
+    if(got[i] !== undefined) return;
+    var card = $('.qz[data-qi="' + i + '"]');
+    $$('.op', card).forEach(function(b){
+      b.disabled = true;
+      if(+b.dataset.o === QUIZ[i].a) b.classList.add('yes');
+    });
+    if(j !== QUIZ[i].a) btn.classList.add('no');
+    feedback(i, j === QUIZ[i].a);
+  });
+});
+$$('#quizBox [data-chk]').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var i = +btn.dataset.chk, card = $('.qz[data-qi="' + i + '"]');
+    var ins = $$('.inp', card), a = QUIZ[i].a;
+    var v = ins.map(function(x){ return x.value.trim().toLowerCase().replace(/s$/,''); });
+    var want = a.map(function(x){ return x.replace(/s$/,''); });
+    ins.forEach(function(x,j){ x.style.borderColor = v[j] === want[j] ? 'var(--ok)' : 'var(--er)'; });
+    feedback(i, v[0] === want[0] && v[1] === want[1]);
+  });
+});
+var held = null, dropped = 0;
+function place(chip, zone){
+  dropped++;
+  var ok = chip.dataset.side === zone.dataset.zone;
+  var el = document.createElement('span');
+  el.className = 'dr ' + (ok ? 'y' : 'n');
+  el.textContent = chip.textContent + (ok ? '' : '  ✕');
+  $('.zn-i', zone).appendChild(el);
+  chip.classList.add('used'); chip.classList.remove('sel'); held = null;
+  if(dropped === 8){
+    var bad = $$('#dndQ .dr.n').length, fb = $('#dndFb');
+    fb.className = 'fb sh ' + (bad === 0 ? 'g' : 'b');
+    fb.innerHTML = bad === 0
+      ? '<b>All eight correct.</b> The shortcut you used without noticing: if it describes what you want, it is in the request. If it describes what happened, it is in the response.'
+      : '<b>' + bad + ' in the wrong box.</b> Method, URL and query parameters describe the asking. Status codes, Set-Cookie and Cache-Control describe the answering.';
+    got['dnd'] = bad === 0; paintScore();
+  }
+}
+$$('#dndBank .ch').forEach(function(c){
+  c.addEventListener('dragstart', function(e){ held = c; e.dataTransfer.setData('text/plain','x'); });
+  c.addEventListener('click', function(){
+    if(c.classList.contains('used')) return;
+    if(held) held.classList.remove('sel');
+    held = (held === c) ? null : c;
+    if(held) c.classList.add('sel');
+  });
+});
+$$('#dndQ .zn').forEach(function(z){
+  z.addEventListener('dragover', function(e){ e.preventDefault(); z.classList.add('over'); });
+  z.addEventListener('dragleave', function(){ z.classList.remove('over'); });
+  z.addEventListener('drop', function(e){ e.preventDefault(); z.classList.remove('over'); if(held) place(held, z); });
+  z.addEventListener('click', function(){ if(held) place(held, z); });
+});
+$('#qReset').addEventListener('click', function(){
+  got = {}; dropped = 0; held = null; paintScore();
+  $$('#quizBox .op').forEach(function(b){ b.disabled = false; b.className = 'op'; });
+  $$('#quizBox .inp').forEach(function(b){ b.value = ''; b.style.borderColor = ''; });
+  $$('#quizBox .fb, #dndFb').forEach(function(f){ f.className = 'fb'; f.innerHTML = ''; });
+  $$('#dndQ .zn-i').forEach(function(z){ z.innerHTML = ''; });
+  $$('#dndBank .ch').forEach(function(c){ c.className = 'ch'; });
+});
+paintScore();
+
+/* ---------- 17 · MINI ASSIGNMENT ---------- */
+var MA = [
+  ['i-cart','Amazon · searching for a laptop',
+   ['GET /products?q=laptop','The product database','The list of results'],0,
+   ['Draw the product cards','Look up matching products, prices and stock for your region','Store the search on your phone'],1,
+   ['A page of matching products with prices','Nothing — searches have no reply','The raw database file'],0,
+   'Request: a GET carrying your search term as a query parameter, plus your session cookie. Server: works out what you meant, checks region and availability, and asks the catalogue. Response: 200 OK with a page of items, prices and stock — plus a caching header so an identical search need not be answered twice.'],
+  ['i-search','Google · searching three words',
+   ['GET /search?q=how+to+boil+rice','The ten links that come back','The internet itself'],0,
+   ['Store your search history only','Interpret the words, then rank matches from a sorted index of the web','Send the whole web to your browser'],1,
+   ['200 OK with ten ranked links','The full index of the web','A 404, since pages move'],0,
+   'Request: a GET with the words as a query parameter — a few hundred bytes. Server: works out what you probably meant, searches a pre-sorted index, and ranks the matches. Response: 200 OK carrying about ten links, usually in under half a second.'],
+  ['i-play','YouTube · pressing play',
+   ['A request for the video, then one per few seconds of playback','The video file on your phone','The comment section'],0,
+   ['Convert the video while you wait','Check region and age limits, then hand back a stream address','Nothing — video plays locally'],1,
+   ['A stream address plus your last watch position','The entire video in one message','Only the view count'],0,
+   'Request: one call to start playback, then a steady stream of further requests, each asking for the next few seconds. Server: checks region and age restrictions, decides a quality for your connection, and reads where you stopped last time. Response: 200 OK with a stream address, a resume point, and then chunk after chunk of video.'],
+  ['i-car','Uber · booking a ride',
+   ['POST /rides with your pickup and drop points','The driver\'s car','The map on screen'],0,
+   ['Draw the moving car icon','See every free driver, pair exactly one with you, and lock them','Let your phone pick a driver'],1,
+   ['201 Created with the driver and an arrival time','200 OK with an empty body','A list of every driver in the city'],0,
+   'Request: a POST — it creates something new — carrying two coordinates. Server: looks at every free driver and every waiting rider at once, chooses one, and locks that driver so nobody else is promised them. Response: 201 Created, because a ride now exists that did not before, with the driver and an ETA.'],
+  ['i-chat','WhatsApp · sending a message',
+   ['POST /messages with the recipient and the text','The grey tick on screen','The recipient\'s phone'],0,
+   ['Deliver it directly to the other phone','Confirm the recipient, store the message, and hold it for delivery','Nothing — phones talk to each other'],1,
+   ['201 Created with a message id and a timestamp','The recipient\'s reply','Nothing, until they read it'],0,
+   'Request: a POST carrying the recipient and the text. Server: confirms the recipient exists and accepts messages, then stores it — because your phone cannot reach theirs directly. Response: 201 Created with an id and a timestamp, which is what turns into the first grey tick.']
+];
+$('#maBox').innerHTML = MA.map(function(m,i){
+  var opts = function(list){ return list.map(function(o,j){ return '<option value="' + j + '">' + o + '</option>'; }).join(''); };
+  return '<div class="pane pad marow" data-i="' + i + '">' +
+    '<div class="row between"><div class="row"><div class="cb sv">' + ic(m[0],'ic') + '</div>' +
+    '<h4>' + (i+1) + ' · ' + m[1] + '</h4></div><span class="tp" data-mark="' + i + '">not checked</span></div>' +
+    '<div class="grid g3" style="margin-top:14px; gap:12px">' +
+      '<div><span class="lbl">the request</span><select class="pick" data-q="' + i + '">' +
+        '<option value="-1">choose…</option>' + opts(m[2]) + '</select></div>' +
+      '<div><span class="lbl">what the server does</span><select class="pick" data-s="' + i + '">' +
+        '<option value="-1">choose…</option>' + opts(m[4]) + '</select></div>' +
+      '<div><span class="lbl">the response</span><select class="pick" data-r="' + i + '">' +
+        '<option value="-1">choose…</option>' + opts(m[6]) + '</select></div>' +
+    '</div>' +
+    '<div class="hidden-ans"><p class="sm" style="border-top:1px solid var(--line); margin-top:13px; padding-top:12px">' +
+    '<b style="color:var(--tx)">Full breakdown: </b>' + m[8] + '</p></div></div>';
+}).join('');
+$('#maCheck').addEventListener('click', function(){
+  var right = 0;
+  MA.forEach(function(m,i){
+    var a = $('select[data-q="' + i + '"]'), b = $('select[data-s="' + i + '"]'), c = $('select[data-r="' + i + '"]');
+    var oa = +a.value === m[3], ob = +b.value === m[5], oc = +c.value === m[7];
+    a.className = 'pick ' + (a.value === '-1' ? '' : (oa ? 'good' : 'bad'));
+    b.className = 'pick ' + (b.value === '-1' ? '' : (ob ? 'good' : 'bad'));
+    c.className = 'pick ' + (c.value === '-1' ? '' : (oc ? 'good' : 'bad'));
+    var mark = $('[data-mark="' + i + '"]');
+    if(oa && ob && oc){ right++; mark.textContent = 'correct'; mark.className = 'tp rs'; }
+    else { mark.textContent = 'try again'; mark.className = 'tp er'; }
+    $('.hidden-ans', $('.marow[data-i="' + i + '"]')).classList.add('show');
+  });
+  $('#maScore').textContent = right + ' of 5 correct';
+  $('#maFill').style.width = right * 20 + '%';
+  var bd = $('#maBadge');
+  bd.textContent = 'assignment ' + right + '/5';
+  bd.className = 'tp ' + (right >= 4 ? 'rs' : 'er');
+});
+
+/* ---------- 18 · MIND MAP ---------- */
+var MAP = {
+  user:['User','A person with something they want. The user only ever touches the browser. Everything they see arrived as a response — and the user is the last stop as well as the first.'],
+  browser:['Browser','The client. It turns your click into a written request, waits, then reads the reply and draws it. It appears twice in this loop: once sending, once receiving.'],
+  request:['Request','The outbound message. Method, URL, query parameters, headers, cookies, and sometimes a body. Plain text, self-contained, and completely readable if you look.'],
+  internet:['Internet','The road. It carries the characters and understands none of them. It is also usually the slowest part of the whole journey — travel time normally exceeds the server\'s work.'],
+  server:['Server','Where the request arrives and stops. It never goes further than here. The server checks the message has the expected shape and hands it to the application.'],
+  backend:['Backend','The rules. Who is asking, are they allowed, what exactly should they be shown. This stage decides the status code that the response will carry.'],
+  database:['Database','Storage, reached only through the server. It answers exactly the question it was asked and forms no opinion about whether asking was a good idea.'],
+  response:['Response','The inbound message. A status code first, then headers, then usually a body. It travels home on the very same connection the request opened.']
+};
+function pickMap(k){
+  $$('.mm .nd').forEach(function(n){
+    n.classList.toggle('dim', k !== null && n.dataset.k !== k && !linked(k, n.dataset.k));
+  });
+  $$('.mm .eg').forEach(function(e){
+    e.classList.toggle('hot', k !== null && (' ' + e.dataset.e + ' ').indexOf(' ' + k + ' ') > -1);
+  });
+  $('#mapInfo').innerHTML = k === null
+    ? '<b>Click a box to explore</b><p>Eight parts. Five steps out, three steps home — and the browser and user are each visited twice, which is why the loop closes.</p>'
+    : '<b>' + MAP[k][0] + '</b><p>' + MAP[k][1] + '</p>';
+}
+function linked(k, other){
+  return $$('.mm .eg').some(function(e){
+    var p = e.dataset.e.split(' ');
+    return p.indexOf(k) > -1 && p.indexOf(other) > -1;
+  });
+}
+$$('.mm .nd').forEach(function(n){
+  n.setAttribute('tabindex','0');
+  n.addEventListener('click', function(){ pickMap(n.dataset.k); });
+  n.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); pickMap(n.dataset.k); }
+  });
+});
+$('#mapClear').addEventListener('click', function(){ pickMap(null); });
+
+/* ---------- 19 · SUMMARY ROUTE + COMPLETION ---------- */
+$('#sumRun').addEventListener('click', function(){
+  var b = this; b.disabled = true;
+  runRoute($('#sumRoute'), $('#sumPkt'), ['request','out','deciding','lookup','response','drawn'], 900, 4)
+    .then(function(){ b.disabled = false; });
+});
+$('#celebrate').addEventListener('click', function(){
+  var card = $('#doneCard'), tk = $('#tick');
+  tk.classList.remove('go'); void tk.offsetWidth; tk.classList.add('go');
+  $$('.cf', card).forEach(function(c){ c.remove(); });
+  if(SLOW) return;
+  var cols = ['var(--rq)','var(--rs)','var(--sv)','var(--db)'];
+  for(var i = 0; i < 46; i++){
+    var c = document.createElement('i');
+    c.className = 'cf';
+    c.style.left = Math.random() * 100 + '%';
+    c.style.background = cols[i % cols.length];
+    c.style.animationDelay = Math.random() * .55 + 's';
+    c.style.transform = 'rotate(' + Math.random() * 90 + 'deg)';
+    card.appendChild(c); void c.offsetWidth; c.classList.add('go');
+  }
+  setTimeout(function(){ $$('.cf', card).forEach(function(c){ c.remove(); }); }, 3400);
+});
+
+})();
+</script>
+</body>
+</html>
