@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What is an API — Bookshelf API Explorer</title>
+<style>
+  :root{
+    --paper:#F1F3F0; --card:#FFFFFF; --ink:#1A1D23; --ink-2:#565B66; --ink-3:#8B909A;
+    --line:#E3E6E2; --line-2:#D2D6D1;
+    --blue:#2F6FB0; --blue-bg:#E4EEF7;
+    --green:#17936B; --green-bg:#E4F3ED;
+    --amber:#B0741A; --amber-bg:#F8EEDC;
+    --red:#C0453B; --red-bg:#F7E5E3;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#131519; --card:#1B1E24; --ink:#ECEEF1; --ink-2:#A2A7B1; --ink-3:#6A6F78;
+      --line:#292D34; --line-2:#353A43;
+      --blue:#5B9BD9; --blue-bg:#132532;
+      --green:#37BE8E; --green-bg:#122D24;
+      --amber:#D6A24A; --amber-bg:#31270F;
+      --red:#E0736A; --red-bg:#331A17;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;padding:26px 18px 48px}
+  .wrap{max-width:860px;margin:0 auto}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
+  h1{font-size:26px;font-weight:650;letter-spacing:-.02em;margin:0 0 4px}
+  .lede{color:var(--ink-2);font-size:14.5px;margin:0 0 18px}
+  .base{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);background:var(--card);
+    border:1px solid var(--line);border-radius:9px;padding:9px 12px;margin:0 0 16px}
+  .base b{color:var(--ink);font-weight:600}
+
+  .grid{display:grid;grid-template-columns:minmax(0,0.95fr) minmax(0,1.25fr);gap:14px}
+  .menu{display:flex;flex-direction:column;gap:5px}
+  .grp{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:10px 2px 3px}
+  .grp:first-child{margin-top:0}
+  .row{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;border:1px solid var(--line);
+    background:var(--card);cursor:pointer;text-align:left;font-family:inherit;color:inherit;width:100%}
+  .row:hover{border-color:var(--ink-3)}
+  .row.on{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+  .row:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .verb{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:3px 7px;border-radius:5px;min-width:58px;text-align:center;letter-spacing:.02em}
+  .row code{font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+
+  .detail{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:17px}
+  .dhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px}
+  .dpath{font-family:var(--mono);font-size:13px}
+  .dpath .b{color:var(--ink-3)}
+  .dpath .p{color:var(--ink);font-weight:500}
+  .desc{font-size:14px;line-height:1.55;margin:0 0 15px;color:var(--ink)}
+  .sec{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin:0 0 5px}
+  pre{font-family:var(--mono);font-size:12px;background:var(--paper);border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;margin:0 0 15px;white-space:pre;overflow-x:auto;color:var(--ink)}
+  .statusrow{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .sbadge{font-family:var(--mono);font-size:12px;font-weight:600;padding:3px 9px;border-radius:6px}
+  .note{font-size:12.5px;line-height:1.5;color:var(--ink-2);border-left:2px solid var(--line-2);padding-left:11px;margin-top:2px}
+
+  .cap{font-size:13px;line-height:1.6;color:var(--ink-2);margin:20px 0 0;text-align:center;
+    border-top:1px solid var(--line);padding-top:16px}
+  .cap b{color:var(--ink)}
+
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+  @media (max-width:560px){.grid{grid-template-columns:1fr}h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Lesson 4 · APIs</p>
+  <h1>The Bookshelf API</h1>
+  <p class="lede">This whole list of operations is the API. Click any one to inspect its contract — what you send, and what comes back.</p>
+  <p class="base">Base URL &nbsp;&nbsp; <b>https://api.bookshelf.dev</b></p>
+
+  <div class="grid">
+    <div class="menu" id="menu"></div>
+    <div class="detail" id="detail"></div>
+  </div>
+
+  <p class="cap">Everything on the left — every operation and its shape — <b>is the API</b>.<br>Behind each row sit databases, rules, and storage. You never see them; you just call the menu.</p>
+</div>
+
+<script>
+const roleName={GET:'blue',POST:'green',PATCH:'amber',DELETE:'red'};
+const API=[
+ {group:'Books',items:[
+   {id:'b1',m:'GET',path:'/books',desc:'List all books on the shelf, a page at a time.',body:null,
+     status:'200 OK',srole:'green',res:'[\n  { "id": 1, "title": "Dune" },\n  { "id": 2, "title": "1984" }\n]',note:'Returns a collection — many books, not one.'},
+   {id:'b2',m:'GET',path:'/books/{id}',desc:'Fetch a single book by its id.',body:null,
+     status:'200 OK',srole:'green',res:'{\n  "id": 1,\n  "title": "Dune",\n  "authorId": 7,\n  "year": 1965\n}',note:'One id in, one book out. A missing id would return 404.'},
+   {id:'b3',m:'POST',path:'/books',desc:'Add a brand-new book to the shelf.',body:'{\n  "title": "New Book",\n  "authorId": 7,\n  "year": 2026\n}',
+     status:'201 Created',srole:'green',res:'{\n  "id": 843,\n  "title": "New Book"\n}',note:'You send the data; the server assigns the new id.'},
+   {id:'b4',m:'PATCH',path:'/books/{id}',desc:'Update part of an existing book — say, fix the year.',body:'{\n  "year": 1966\n}',
+     status:'200 OK',srole:'green',res:'{\n  "id": 1,\n  "title": "Dune",\n  "year": 1966\n}',note:'PATCH changes only the fields you send, nothing else.'},
+   {id:'b5',m:'DELETE',path:'/books/{id}',desc:'Remove a book from the shelf.',body:null,
+     status:'204 No Content',srole:'green',res:'(empty body — there is nothing left to return)',note:'Success with an empty body is normal for a delete.'}
+ ]},
+ {group:'Authors',items:[
+   {id:'a1',m:'GET',path:'/authors/{id}',desc:'Fetch a single author.',body:null,
+     status:'200 OK',srole:'green',res:'{\n  "id": 7,\n  "name": "Frank Herbert"\n}',note:null},
+   {id:'a2',m:'GET',path:'/authors/{id}/books',desc:'List every book written by one author.',body:null,
+     status:'200 OK',srole:'green',res:'[\n  { "id": 1, "title": "Dune" }\n]',note:'A nested path: the books that belong to one author.'}
+ ]}
+];
+const $=id=>document.getElementById(id);
+function badge(el,role){el.style.background='var(--'+role+'-bg)';el.style.color='var(--'+role+')';}
+function find(id){for(const g of API)for(const it of g.items)if(it.id===id)return it;}
+function select(id){
+  document.querySelectorAll('.row').forEach(r=>r.classList.toggle('on',r.dataset.id===id));
+  const s=find(id);
+  $('detail').innerHTML=
+    '<div class="dhead"><span class="verb" id="dv">'+s.m+'</span>'+
+    '<span class="dpath"><span class="b">/api.bookshelf.dev</span><span class="p">'+s.path+'</span></span></div>'+
+    '<p class="desc">'+s.desc+'</p>'+
+    '<p class="sec">Request body</p><pre>'+(s.body?s.body:'(no body — this call only reads)')+'</pre>'+
+    '<p class="sec">Example response</p>'+
+    '<div class="statusrow"><span class="sbadge" id="ds">'+s.status+'</span></div>'+
+    '<pre>'+s.res+'</pre>'+
+    (s.note?'<p class="note">'+s.note+'</p>':'');
+  badge($('dv'),roleName[s.m]); badge($('ds'),s.srole);
+}
+let html='';
+API.forEach(g=>{
+  html+='<div class="grp">'+g.group+'</div>';
+  g.items.forEach(it=>{
+    html+='<button class="row" data-id="'+it.id+'"><span class="verb" style="background:var(--'+roleName[it.m]+'-bg);color:var(--'+roleName[it.m]+')">'+it.m+'</span><code>'+it.path+'</code></button>';
+  });
+});
+$('menu').innerHTML=html;
+document.querySelectorAll('.row').forEach(r=>r.addEventListener('click',()=>select(r.dataset.id)));
+select('b1');
+</script>
+</body>
+</html>
